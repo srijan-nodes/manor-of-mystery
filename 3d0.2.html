@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Manor of Whispers FPS - Detective Srijan Das</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Special+Elite&family=Inter:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        body { margin: 0; overflow: hidden; background: #000; font-family: 'Inter', sans-serif; }
+        canvas { display: block; }
+        .font-typewriter { font-family: 'Special Elite', cursive; }
+        .hud-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
+        .crosshair { position: absolute; top: 50%; left: 50%; width: 8px; height: 8px; background: rgba(255,255,255,0.5); transform: translate(-50%, -50%); border-radius: 50%; border: 1px solid #000; }
+        .interaction-prompt { position: absolute; bottom: 30%; left: 50%; transform: translateX(-50%); color: #fbbf24; font-weight: bold; text-shadow: 2px 2px #000; font-size: 14px; letter-spacing: 0.1em; }
+        .ui-panel { pointer-events: auto; background: rgba(10, 10, 15, 0.98); border: 1px solid #3f3f46; box-shadow: 0 0 40px rgba(0,0,0,1); }
+        .scanline { position: absolute; width: 100%; height: 100%; background: linear-gradient(to bottom, transparent 50%, rgba(0,0,0,0.1) 50%); background-size: 100% 4px; pointer-events: none; opacity: 0.2; }
+        .typing-dot { animation: typing 1.4s infinite ease-in-out both; width: 4px; height: 4px; background: #71717a; border-radius: 50%; margin: 0 2px; }
+        @keyframes typing { 0%, 80%, 100% { transform: scale(0); } 40% { transform: scale(1); } }
+        .glass { background: rgba(20, 20, 25, 0.8); backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,0.1); }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
+
+        const OLLAMA_URL = "http://localhost:11434/api/chat";
+        const MODEL = "llama3.1:latest";
+
+        /**
+         * Robust formatter to prevent React from crashing when the LLM
+         * returns objects instead of strings for victim/weapon/etc.
+         */
+        const formatVal = (val) => {
+            if (!val) return "";
+            if (typeof val === 'string') return val;
+            if (typeof val === 'object') {
+                // Prioritize name/age/occupation found in your logs
+                if (val.name && val.occupation) return `${val.name} (${val.occupation}, age ${val.age || '?'})`;
+                return val.name || val.title || val.item || val.description || val.text || JSON.stringify(val);
+            }
+            return String(val);
+        };
+
+        const cleanJSON = (str) => {
+            try {
+                const match = str.match(/\{[\s\S]*\}/);
+                return match ? match[0] : str;
+            } catch (e) { return str; }
+        };
+
+        function App() {
+            const [status, setStatus] = useState('initializing');
+            const [crimeScene, setCrimeScene] = useState(null);
+            const [activeUI, setActiveUI] = useState(null); 
+            const [activeSuspect, setActiveSuspect] = useState(null);
+            const [conversations, setConversations] = useState({});
+            const [evidence, setEvidence] = useState([]);
+            const [completedActions, setCompletedActions] = useState(new Set());
+            const [isThinking, setIsThinking] = useState(false);
+            const [interactionText, setInteractionText] = useState("");
+            
+            const canvasRef = useRef();
+            const mountRef = useRef(false);
+            const uiRef = useRef(null); 
+
+            const stateRef = useRef({ 
+                moveForward: false, moveBackward: false, moveLeft: false, moveRight: false,
+                pitch: 0, yaw: 0, camera: null, interactables: [] 
+            });
+
+            useEffect(() => { uiRef.current = activeUI; }, [activeUI]);
+
+            const initMystery = async () => {
+                setStatus('generating');
+                try {
+                    const prompt = `Generate a murder mystery JSON. Include: victim (string), location (string), weapon (string), motive (string), fullStory (string), investigativeActions (array of 4: id, task, result), suspects (array of 4: id, name, role, secret, isKiller, clueTrigger). JSON ONLY.`;
+                    const res = await fetch(OLLAMA_URL, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ 
+                            model: MODEL, 
+                            format: "json", 
+                            stream: false, 
+                            messages: [{ role: "user", content: prompt }] 
+                        })
+                    });
+                    const data = await res.json();
+                    const scene = JSON.parse(cleanJSON(data.message.content));
+                    setCrimeScene(scene);
+                    const h = {}; scene.suspects.forEach(s => h[s.id] = []);
+                    setConversations(h);
+                    setStatus('playing');
+                } catch (e) {
+                    alert("Ollama connection failed. Ensure Ollama is running and OLLAMA_ORIGINS='*' is set.");
+                    setStatus('initializing');
+                }
+            };
+
+            useEffect(() => {
+                if (status !== 'playing' || mountRef.current) return;
+                mountRef.current = true;
+
+                const scene = new THREE.Scene();
+                scene.background = new THREE.Color(0x020202);
+                scene.fog = new THREE.Fog(0x020202, 2, 20);
+
+                const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+                stateRef.current.camera = camera;
+                camera.position.set(0, 1.7, 8); 
+
+                const renderer = new THREE.WebGLRenderer({ antialias: true });
+                renderer.setSize(window.innerWidth, window.innerHeight);
+                renderer.setPixelRatio(window.devicePixelRatio);
+                canvasRef.current.appendChild(renderer.domElement);
+
+                // Lighting
+                const light = new THREE.PointLight(0xffcc00, 1.2, 25);
+                light.position.set(0, 4, 0);
+                scene.add(light);
+                scene.add(new THREE.AmbientLight(0x111111));
+
+                // World
+                const createBox = (w, h, d, x, y, z, color = 0x111111) => {
+                    const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), new THREE.MeshStandardMaterial({ color }));
+                    mesh.position.set(x, y, z);
+                    scene.add(mesh);
+                    return mesh;
+                };
+
+                createBox(40, 0.1, 40, 0, 0, 0, 0x080808); 
+                createBox(40, 0.1, 40, 0, 5, 0, 0x050505); 
+                createBox(30, 5, 0.5, 0, 2.5, -10, 0x151515); 
+                createBox(30, 5, 0.5, 0, 2.5, 10, 0x151515);  
+                createBox(0.5, 5, 20, -15, 2.5, 0, 0x151515); 
+                createBox(0.5, 5, 20, 15, 2.5, 0, 0x151515);  
+
+                const interactables = [];
+                const addMarker = (name, x, z, type, data = null) => {
+                    const m = new THREE.Mesh(new THREE.BoxGeometry(0.8, 1.8, 0.1), new THREE.MeshStandardMaterial({ color: 0xffaa00, emissive: 0xffaa00, emissiveIntensity: 0.3 }));
+                    m.position.set(x, 1, z);
+                    m.userData = { name, type, data };
+                    scene.add(m);
+                    interactables.push(m);
+                };
+
+                addMarker("Read Case Briefing", 0, -9.5, "briefing");
+                crimeScene.suspects.forEach((s, i) => {
+                    addMarker(`Interrogate: ${formatVal(s.name)}`, -10 + (i * 4), -9.5, "chat", s);
+                });
+                addMarker("Control Terminal", -14.5, 0, "actions");
+                addMarker("Talk to Boss", 14.5, 0, "boss");
+
+                // Controls
+                const onMouseMove = (e) => {
+                    if (document.pointerLockElement === renderer.domElement) {
+                        stateRef.current.yaw -= e.movementX * 0.002;
+                        // Fixed inversion: pitch subtracts Y movement to look up when mouse goes up
+                        stateRef.current.pitch -= e.movementY * 0.002;
+                        stateRef.current.pitch = Math.max(-Math.PI/2.2, Math.min(Math.PI/2.2, stateRef.current.pitch));
+                    }
+                };
+                const onKey = (e, val) => {
+                    if (e.code === 'KeyW') stateRef.current.moveForward = val;
+                    if (e.code === 'KeyS') stateRef.current.moveBackward = val;
+                    if (e.code === 'KeyA') stateRef.current.moveLeft = val;
+                    if (e.code === 'KeyD') stateRef.current.moveRight = val;
+                };
+
+                window.addEventListener('mousemove', onMouseMove);
+                window.addEventListener('keydown', (e) => onKey(e, true));
+                window.addEventListener('keyup', (e) => onKey(e, false));
+
+                const raycaster = new THREE.Raycaster();
+                const vel = new THREE.Vector3();
+                const dir = new THREE.Vector3();
+                
+                const animate = () => {
+                    requestAnimationFrame(animate);
+                    
+                    if (document.pointerLockElement === renderer.domElement && !uiRef.current) {
+                        camera.rotation.set(stateRef.current.pitch, stateRef.current.yaw, 0, 'YXZ');
+                        
+                        vel.x -= vel.x * 10 * 0.016;
+                        vel.z -= vel.z * 10 * 0.016;
+                        
+                        dir.z = Number(stateRef.current.moveForward) - Number(stateRef.current.moveBackward);
+                        dir.x = Number(stateRef.current.moveRight) - Number(stateRef.current.moveLeft);
+                        dir.normalize();
+
+                        // Fixed movement inversion
+                        if (stateRef.current.moveForward || stateRef.current.moveBackward) vel.z -= dir.z * 50 * 0.016;
+                        if (stateRef.current.moveLeft || stateRef.current.moveRight) vel.x -= dir.x * 50 * 0.016;
+
+                        camera.translateX(-vel.x * 0.016);
+                        camera.translateZ(vel.z * 0.016); 
+                        camera.position.y = 1.7;
+
+                        camera.position.x = Math.max(-14, Math.min(14, camera.position.x));
+                        camera.position.z = Math.max(-9, Math.min(9, camera.position.z));
+
+                        raycaster.setFromCamera(new THREE.Vector2(0,0), camera);
+                        const hits = raycaster.intersectObjects(interactables);
+                        if (hits.length > 0 && hits[0].distance < 3) {
+                            setInteractionText(`[CLICK] ${hits[0].object.userData.name}`);
+                        } else setInteractionText("");
+                    }
+                    renderer.render(scene, camera);
+                };
+                animate();
+
+                const onClick = () => {
+                    if (document.pointerLockElement !== renderer.domElement) return;
+                    raycaster.setFromCamera(new THREE.Vector2(0,0), camera);
+                    const hits = raycaster.intersectObjects(interactables);
+                    if (hits.length > 0 && hits[0].distance < 3) {
+                        const d = hits[0].object.userData;
+                        if (d.type === 'chat') setActiveSuspect(d.data);
+                        setActiveUI(d.type);
+                        document.exitPointerLock();
+                    }
+                };
+                renderer.domElement.addEventListener('click', onClick);
+
+                const onResize = () => {
+                    camera.aspect = window.innerWidth / window.innerHeight;
+                    camera.updateProjectionMatrix();
+                    renderer.setSize(window.innerWidth, window.innerHeight);
+                };
+                window.addEventListener('resize', onResize);
+            }, [status]);
+
+            const chat = async (msg) => {
+                if (!msg.trim() || isThinking) return;
+                const s = activeSuspect;
+                setConversations(p => ({ ...p, [s.id]: [...p[s.id], { role: 'user', content: msg }] }));
+                setIsThinking(true);
+                try {
+                    const res = await fetch(OLLAMA_URL, {
+                        method: "POST", headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                            model: MODEL, stream: false,
+                            messages: [{ role: 'system', content: `You are ${formatVal(s.name)}. Secret: ${formatVal(s.secret)}. If user says "${formatVal(s.clueTrigger)}", reveal it. Max 2 sentences.` }, ...conversations[s.id], { role: 'user', content: msg }]
+                        })
+                    });
+                    const d = await res.json();
+                    const reply = d.message.content;
+                    setConversations(p => ({ ...p, [s.id]: [...p[s.id], { role: 'assistant', content: reply }] }));
+                    if (reply.toLowerCase().includes(formatVal(s.clueTrigger).toLowerCase())) {
+                        setEvidence(prev => [...new Set([...prev, `Clue: ${formatVal(s.name)} revealed a secret.`])]);
+                    }
+                } finally { setIsThinking(false); }
+            };
+
+            if (status !== 'playing') return <LoadingScreen status={status} onStart={initMystery} />;
+
+            return (
+                <div className="relative w-screen h-screen bg-black">
+                    <div ref={canvasRef} className="w-full h-full" onClick={(e) => {
+                        if (!activeUI) e.target.requestPointerLock();
+                    }} />
+                    
+                    <div className="hud-overlay">
+                        <div className="crosshair" />
+                        <div className="scanline" />
+                        {interactionText && <div className="interaction-prompt font-typewriter">{interactionText}</div>}
+
+                        <div className="absolute top-6 left-6 glass p-4 rounded-xl ui-element w-64">
+                            <p className="text-[9px] text-zinc-500 uppercase font-bold tracking-widest mb-1">Detective Srijan Das</p>
+                            <p className="text-zinc-100 font-bold text-xs uppercase tracking-tighter">Site: {formatVal(crimeScene.location)}</p>
+                        </div>
+
+                        <div className="absolute top-6 right-6 glass p-4 rounded-xl ui-element w-64 max-h-[250px] overflow-y-auto custom-scrollbar pr-2">
+                            <p className="text-[9px] text-amber-500 uppercase font-bold mb-2">Evidence Folder</p>
+                            <div className="space-y-1.5">
+                                {evidence.map((e, i) => <div key={i} className="text-[10px] bg-white/5 p-2 rounded border border-white/5 leading-tight">{formatVal(e)}</div>)}
+                                {evidence.length === 0 && <p className="text-[9px] text-zinc-600 italic">No clues found...</p>}
+                            </div>
+                        </div>
+
+                        {activeUI && (
+                            <div className="absolute inset-0 flex items-center justify-center bg-black/40 pointer-events-none p-4 z-50">
+                                <div className="ui-panel p-8 rounded-3xl w-full max-w-2xl animate-fade-in pointer-events-auto relative">
+                                    <button onClick={() => setActiveUI(null)} className="absolute top-6 right-6 text-zinc-600 hover:text-white uppercase text-[9px] font-bold tracking-widest">Exit Menu [ESC]</button>
+                                    
+                                    {activeUI === 'briefing' && (
+                                        <div className="space-y-6">
+                                            <h2 className="text-xl font-typewriter text-amber-500 uppercase">Case Summary</h2>
+                                            <div className="p-6 bg-zinc-900/50 rounded-2xl border border-zinc-800 italic text-zinc-300 leading-relaxed text-sm shadow-inner">
+                                                {formatVal(crimeScene.fullStory)}
+                                            </div>
+                                            <div className="grid grid-cols-2 gap-4 text-[11px] text-zinc-500 font-bold uppercase tracking-widest">
+                                                <div className="p-3 border border-zinc-800 rounded-lg bg-zinc-900/30">Victim: <span className="text-zinc-200">{formatVal(crimeScene.victim)}</span></div>
+                                                <div className="p-3 border border-zinc-800 rounded-lg bg-zinc-900/30">Weapon: <span className="text-zinc-200">{formatVal(crimeScene.weapon)}</span></div>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {activeUI === 'chat' && activeSuspect && (
+                                        <div className="flex flex-col h-[400px]">
+                                            <div className="mb-4">
+                                                <h2 className="text-lg font-typewriter text-amber-500">{formatVal(activeSuspect.name)}</h2>
+                                                <p className="text-[10px] text-zinc-500 uppercase">{formatVal(activeSuspect.role)}</p>
+                                            </div>
+                                            <div className="flex-1 overflow-y-auto space-y-4 mb-4 pr-2 custom-scrollbar">
+                                                {conversations[activeSuspect.id].map((m, i) => (
+                                                    <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                                                        <div className={`max-w-[85%] p-3 rounded-2xl text-xs ${m.role === 'user' ? 'bg-amber-700 text-white shadow-lg' : 'bg-zinc-800 text-zinc-200 border border-zinc-700 shadow-md'}`}>
+                                                            {formatVal(m.content)}
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                                {isThinking && <div className="flex p-2 gap-1"><div className="typing-dot"/><div className="typing-dot"/><div className="typing-dot"/></div>}
+                                            </div>
+                                            <form onSubmit={(e) => { e.preventDefault(); chat(e.target.m.value); e.target.m.value=''; }} className="flex gap-2">
+                                                <input name="m" className="flex-1 bg-zinc-900 border border-zinc-800 rounded-xl p-3 text-xs text-white focus:outline-none focus:border-amber-600 transition-colors" placeholder="Ask a question..." autoFocus />
+                                                <button className="bg-amber-600 text-white px-5 rounded-xl font-bold uppercase text-[10px] shadow-lg shadow-amber-900/20 hover:bg-amber-500 transition-all">Send</button>
+                                            </form>
+                                        </div>
+                                    )}
+
+                                    {activeUI === 'actions' && (
+                                        <div className="space-y-4">
+                                            <h2 className="text-xl font-typewriter text-zinc-200">Terminal Access</h2>
+                                            <div className="grid grid-cols-2 gap-3">
+                                                {crimeScene.investigativeActions.map(a => (
+                                                    <button key={a.id} onClick={() => { setCompletedActions(p => new Set([...p, a.id])); setEvidence(e => [...new Set([...e, a.result])]); }} 
+                                                        disabled={completedActions.has(a.id)}
+                                                        className={`p-4 border rounded-2xl text-left transition-all ${completedActions.has(a.id) ? 'bg-zinc-900 border-zinc-800 opacity-40' : 'bg-zinc-900/50 border-zinc-800 hover:border-amber-600 hover:bg-amber-900/10'}`}>
+                                                        <p className="text-[11px] font-bold text-zinc-100 mb-1">{formatVal(a.task)}</p>
+                                                        {completedActions.has(a.id) && <p className="text-[9px] text-amber-500 italic mt-2 border-t border-amber-900/20 pt-2">{formatVal(a.result)}</p>}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {activeUI === 'boss' && (
+                                        <div className="text-center space-y-6 py-4">
+                                            <h2 className="text-xl font-typewriter uppercase">Case Verdict</h2>
+                                            <p className="text-xs text-zinc-500 italic px-8 leading-relaxed">"The clock is ticking, Srijan. One name. Make it count."</p>
+                                            <div className="grid grid-cols-2 gap-3">
+                                                {crimeScene.suspects.map(s => (
+                                                    <button key={s.id} onClick={() => setActiveUI(s.isKiller ? 'win' : 'lose')} className="bg-red-900/10 border border-red-900/30 text-red-500 p-4 rounded-2xl hover:bg-red-600 hover:text-white transition-all font-bold uppercase text-[9px] tracking-widest shadow-lg">
+                                                        {formatVal(s.name)}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+
+                    {(activeUI === 'win' || activeUI === 'lose') && (
+                        <div className="absolute inset-0 z-[100] bg-black flex flex-col items-center justify-center text-center p-10 animate-fade-in">
+                            <h2 className={`text-6xl font-typewriter mb-6 ${activeUI === 'win' ? 'text-amber-500' : 'text-red-600'}`}>
+                                {activeUI === 'win' ? 'GUILTY VERDICT' : 'CASE CLOSED'}
+                            </h2>
+                            <p className="text-zinc-500 text-lg max-w-xl mb-12 leading-relaxed font-sans">
+                                {activeUI === 'win' 
+                                    ? "Justice has been served. Detective Srijan Das has successfully apprehended the real killer." 
+                                    : "The suspect walked free. The actual killer has vanished into the city, leaving your reputation in tatters."}
+                            </p>
+                            <button onClick={() => window.location.reload()} className="bg-zinc-100 text-black px-10 py-4 rounded-2xl font-bold uppercase text-xs tracking-widest shadow-xl hover:bg-white transition-colors">Start New Case</button>
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        function LoadingScreen({ status, onStart }) {
+            return (
+                <div className="fixed inset-0 bg-zinc-950 flex flex-col items-center justify-center p-6 z-50 text-center font-sans">
+                    <div className="max-w-md w-full space-y-8 animate-fade-in">
+                        <h1 className="text-4xl font-typewriter text-amber-500 mb-2 uppercase tracking-[0.2em]">Manor of Whispers</h1>
+                        <div className="bg-zinc-900 p-8 rounded-[2rem] border border-zinc-800 shadow-2xl space-y-6">
+                            {status === 'initializing' ? (
+                                <div className="space-y-4">
+                                    <p className="text-zinc-400 text-sm leading-relaxed">Local Neural Engine detected. Awaiting initialization by Detective Srijan Das.</p>
+                                    <button onClick={onStart} className="w-full bg-amber-600 hover:bg-amber-500 text-white font-bold py-5 rounded-2xl transition-all uppercase text-xs tracking-widest shadow-lg shadow-amber-900/20">
+                                        Engage Simulation
+                                    </button>
+                                </div>
+                            ) : (
+                                <div className="space-y-4">
+                                    <div className="w-8 h-8 border-2 border-amber-500 border-t-transparent rounded-full animate-spin mx-auto" />
+                                    <p className="font-typewriter text-amber-500 text-xs animate-pulse uppercase tracking-widest">Generating Motives & Alibis...</p>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>

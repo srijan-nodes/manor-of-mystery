@@ -1,12 +1,11 @@
-# LLM Mystery Game
+# 3D Mystery Game
 
-Welcome to the LLM Mystery Game repository. This project contains different prototypes and versions of the mystery game, separated by their core mechanics.
+This branch contains the experimental 3D and FPS versions of the mystery game project. 
+These files represent explorations into a three-dimensional interactive environment for the game mechanics.
 
-## Branches
+## Key Files
+* \3d0.1.html\ - Initial 3D prototype.
+* \3d0.2.html\ - Second 3D prototype.
+* \ps01.html\ - First Person Shooter perspective prototype.
 
-This repository is organized into distinct branches for each version of the game:
-
-* **[text-based]** - Contains the 2D text-based interactive versions of the game (e.g., v0.91, full_gen, entry).
-* **[3d]** - Contains the experimental 3D and FPS versions of the game (e.g., 3d0.1, fps01).
-
-Please switch to the respective branch to view the files.
+Explore this branch for the 3D rendering and mechanics implementations.
