@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Manor of Whispers - Procedural Mystery</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Special+Elite&family=Inter:wght@400;600&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #0c0c0e; color: #e5e5e5; }
+        .font-typewriter { font-family: 'Special Elite', cursive; }
+        .scrollbar-hide::-webkit-scrollbar { display: none; }
+        @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+        .animate-fade-in { animation: fade-in 0.5s ease-out forwards; }
+        .typing-dot { animation: typing 1.4s infinite ease-in-out both; }
+        @keyframes typing { 0%, 80%, 100% { transform: scale(0); } 40% { transform: scale(1); } }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
+
+        const MODEL_NAME = "llama3.1"; 
+        const OLLAMA_URL = "http://127.0.0.1:11434/api/chat";
+
+        const Icons = {
+            Send: (p) => <svg {...p} xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>,
+        };
+
+        function App() {
+            const [gameState, setGameState] = useState('connecting');
+            const [gameCase, setGameCase] = useState(null);
+            const [activeCharId, setActiveCharId] = useState('vivian');
+            const [conversations, setConversations] = useState({ vivian: [], james: [], robert: [] });
+            const [evidence, setEvidence] = useState([]);
+            const [userInput, setUserInput] = useState("");
+            const [isGenerating, setIsGenerating] = useState(false);
+            const chatEndRef = useRef(null);
+
+            const CHARACTERS = [
+                { id: 'vivian', name: 'Lady Vivian', role: 'The Widow', avatar: 'bg-purple-900', desc: 'The grieving wife.' },
+                { id: 'james', name: 'James', role: 'The Butler', avatar: 'bg-slate-700', desc: 'The nervous servant.' },
+                { id: 'robert', name: 'Robert Sterling', role: 'The Partner', avatar: 'bg-amber-900', desc: 'The business associate.' }
+            ];
+
+            useEffect(() => {
+                const initGame = async () => {
+                    try {
+                        // 1. FIX: Check tags (GET) instead of chat (POST)
+                        const check = await fetch("http://127.0.0.1:11434/api/tags");
+                        if (!check.ok) throw new Error("Ollama offline");
+                        
+                        setGameState('generating');
+                        const prompt = `Create a murder mystery. Victim: Arthur Pennyworth. Suspects: Lady Vivian (Widow), James (Butler), Robert Sterling (Business Partner). Provide ONLY a JSON object: {"killer": "Name", "weapon": "Weapon", "motive": "Reason", "vivian_secret": "Secret", "james_secret": "Secret", "robert_secret": "Secret", "clue_trigger": "Keyword"}`;
+
+                        const res = await fetch(OLLAMA_URL, {
+                            method: "POST",
+                            body: JSON.stringify({
+                                model: MODEL_NAME,
+                                messages: [{ role: 'user', content: prompt }],
+                                stream: false,
+                                format: "json"
+                            })
+                        });
+
+                        const data = await res.json();
+                        // FIX: Clean Llama 3.1 markdown if present
+                        let content = data.message.content.replace(/```json/g, "").replace(/```/g, "").trim();
+                        setGameCase(JSON.parse(content));
+                        setGameState('playing');
+                    } catch (e) {
+                        setGameState('error');
+                    }
+                };
+                initGame();
+            }, []);
+
+            const handleSendMessage = async (e) => {
+                e.preventDefault();
+                if (!userInput.trim() || isGenerating) return;
+
+                const text = userInput;
+                const char = CHARACTERS.find(c => c.id === activeCharId);
+                setUserInput("");
+                
+                const currentHistory = conversations[activeCharId];
+                const updatedHistory = [...currentHistory, { role: 'user', content: text }];
+                
+                setConversations(prev => ({ ...prev, [activeCharId]: updatedHistory }));
+                setIsGenerating(true);
+
+                // FIX: Better Gating for Llama 3.1
+                const systemPrompt = `You are ${char.name}. FACT: Arthur was killed with ${gameCase.weapon}. KILLER IS: ${gameCase.killer}. YOUR SECRET: ${gameCase[activeCharId + '_secret']}. 
+                RULES: 1. If you are the killer, deny it UNLESS the player says "${gameCase.clue_trigger}". 2. No greetings. 3. 1-2 sentences only.`;
+
+                try {
+                    const response = await fetch(OLLAMA_URL, {
+                        method: "POST",
+                        body: JSON.stringify({
+                            model: MODEL_NAME,
+                            messages: [{ role: 'system', content: systemPrompt }, ...updatedHistory],
+                            stream: false,
+                            options: { temperature: 0.7, num_predict: 100 }
+                        })
+                    });
+
+                    const data = await response.json();
+                    const reply = data.message.content;
+
+                    setConversations(prev => ({
+                        ...prev,
+                        [activeCharId]: [...updatedHistory, { role: 'assistant', content: reply }]
+                    }));
+
+                    if (reply.toLowerCase().includes(gameCase.clue_trigger.toLowerCase()) && gameCase.killer === char.name) {
+                        setEvidence(prev => [...prev, { title: "Confession", detail: `${char.name} admitted to the crime.` }]);
+                    }
+                } catch (err) {
+                    console.error(err);
+                } finally {
+                    setIsGenerating(false);
+                }
+            };
+
+            if (gameState === 'connecting') return <div className="h-screen flex items-center justify-center font-typewriter">Pinging Ollama...</div>;
+            if (gameState === 'generating') return <div className="h-screen flex items-center justify-center font-typewriter animate-pulse">Writing your mystery...</div>;
+            if (gameState === 'error') return <div className="h-screen flex flex-col items-center justify-center font-typewriter text-red-500">Connection Failed. Check Ollama Origins.<button onClick={() => window.location.reload()} className="mt-4 text-white underline">Retry</button></div>;
+
+            return (
+                <div className="flex h-screen overflow-hidden">
+                    <div className="w-72 bg-zinc-900 border-r border-zinc-800 flex flex-col p-6">
+                        <h1 className="text-amber-500 font-typewriter text-xl mb-8 uppercase">Manor of Whispers</h1>
+                        <div className="space-y-2 mb-8">
+                            <p className="text-[10px] text-zinc-500 uppercase font-bold mb-2">Suspects</p>
+                            {CHARACTERS.map(c => (
+                                <button key={c.id} onClick={() => setActiveCharId(c.id)} className={`w-full text-left p-2 rounded text-xs transition-all ${activeCharId === c.id ? 'bg-amber-600 text-white' : 'hover:bg-zinc-800 text-zinc-400'}`}>
+                                    {c.name}
+                                </button>
+                            ))}
+                        </div>
+                        <div className="flex-1 overflow-y-auto">
+                            <p className="text-[10px] text-zinc-500 uppercase font-bold mb-2">Evidence Folder</p>
+                            <div className="space-y-2 text-[11px]">
+                                <div className="p-2 border border-zinc-800 rounded text-zinc-500 italic">Victim: Arthur. Weapon: {gameCase?.weapon}.</div>
+                                {evidence.map((e, i) => (
+                                    <div key={i} className="p-2 bg-zinc-800 rounded border-l-2 border-amber-500 animate-fade-in">
+                                        <b className="block text-amber-500 mb-1">{e.title}</b>{e.detail}
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                    <div className="flex-1 flex flex-col bg-zinc-950">
+                        <div className="h-16 border-b border-zinc-900 flex items-center px-8 bg-zinc-900/30">
+                            <div className="font-typewriter text-zinc-400">Interrogating: <span className="text-zinc-100">{CHARACTERS.find(c => c.id === activeCharId).name}</span></div>
+                        </div>
+                        <div className="flex-1 overflow-y-auto p-8 space-y-6 scrollbar-hide">
+                            {conversations[activeCharId].map((m, i) => (
+                                <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'} animate-fade-in`}>
+                                    <div className={`max-w-lg p-3 rounded-lg text-sm ${m.role === 'user' ? 'bg-zinc-100 text-black rounded-br-none' : 'bg-zinc-800 text-zinc-200 rounded-tl-none font-serif italic'}`}>
+                                        {m.content}
+                                    </div>
+                                </div>
+                            ))}
+                            {isGenerating && <div className="flex gap-1 animate-pulse"><div className="w-1 h-1 bg-zinc-600 rounded-full" /><div className="w-1 h-1 bg-zinc-600 rounded-full" /><div className="w-1 h-1 bg-zinc-600 rounded-full" /></div>}
+                            <div ref={chatEndRef} />
+                        </div>
+                        <form onSubmit={handleSendMessage} className="p-6 bg-zinc-900/50 flex gap-2">
+                            <input className="flex-1 bg-zinc-800 border-none rounded p-3 text-sm focus:ring-1 focus:ring-amber-500 outline-none" placeholder="Ask a question..." value={userInput} onChange={e => setUserInput(e.target.value)} />
+                            <button className="bg-amber-600 p-3 rounded hover:bg-amber-700 transition-colors"><Icons.Send /></button>
+                        </form>
+                    </div>
+                </div>
+            );
+        }
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>

@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Precinct Alpha - Local Build</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<style>
+* { box-sizing:border-box; margin:0; padding:0; }
+body {
+    overflow:hidden;
+    background:#0c0c0e;
+    font-family: system-ui, sans-serif;
+    color:#eee;
+}
+
+canvas { display:block; }
+
+.hud {
+    position:absolute;
+    top:0; left:0;
+    width:100%; height:100%;
+    pointer-events:none;
+}
+
+.crosshair {
+    position:absolute;
+    top:50%; left:50%;
+    width:6px; height:6px;
+    background:white;
+    transform:translate(-50%,-50%);
+    border-radius:50%;
+}
+
+.interaction {
+    position:absolute;
+    bottom:35%;
+    left:50%;
+    transform:translateX(-50%);
+    color:#f59e0b;
+    font-weight:bold;
+    letter-spacing:2px;
+    font-size:14px;
+}
+
+.panel {
+    position:absolute;
+    top:15px;
+    left:15px;
+    width:260px;
+    background:rgba(15,15,20,0.95);
+    border:1px solid #333;
+    border-radius:12px;
+    padding:15px;
+    pointer-events:auto;
+}
+
+button {
+    width:100%;
+    padding:6px;
+    margin-bottom:10px;
+    background:#222;
+    border:1px solid #444;
+    color:#aaa;
+    cursor:pointer;
+}
+
+button:hover { color:#fff; }
+</style>
+</head>
+
+<body>
+
+<div class="hud">
+    <div class="crosshair"></div>
+    <div id="interaction" class="interaction"></div>
+    <div class="panel">
+        <button onclick="togglePanel()">Toggle Info</button>
+        <div id="info">
+            <div><b>Detective:</b> Srijan Das</div>
+            <div><b>Status:</b> Operational</div>
+        </div>
+    </div>
+</div>
+
+<script src="three.min.js"></script>
+<script>
+
+let scene, camera, renderer;
+let moveF=false, moveB=false, moveL=false, moveR=false;
+let pitch=0, yaw=0;
+let interactables=[];
+let velocity=new THREE.Vector3();
+let direction=new THREE.Vector3();
+let raycaster=new THREE.Raycaster();
+let interactionDiv=document.getElementById("interaction");
+
+init();
+animate();
+
+function init(){
+
+scene=new THREE.Scene();
+scene.background=new THREE.Color(0x0a0a0c);
+scene.fog=new THREE.Fog(0x0a0a0c,2,45);
+
+camera=new THREE.PerspectiveCamera(75,window.innerWidth/window.innerHeight,0.1,1000);
+camera.position.set(0,1.7,18);
+
+renderer=new THREE.WebGLRenderer({antialias:true});
+renderer.setSize(window.innerWidth,window.innerHeight);
+renderer.setPixelRatio(window.devicePixelRatio);
+document.body.appendChild(renderer.domElement);
+
+/* Lighting */
+scene.add(new THREE.AmbientLight(0x777777));
+scene.add(new THREE.HemisphereLight(0xffffff,0x333333,0.8));
+
+function addLight(x,y,z,c,i){
+    let l=new THREE.PointLight(c,i,30);
+    l.position.set(x,y,z);
+    scene.add(l);
+}
+
+addLight(0,4,15,0xffff00,2.5);
+addLight(-12,4,0,0xff3333,2.5);
+addLight(12,4,0,0x3333ff,2.5);
+
+/* Structure */
+function box(w,h,d,x,y,z,color=0x222222){
+    let m=new THREE.Mesh(
+        new THREE.BoxGeometry(w,h,d),
+        new THREE.MeshStandardMaterial({color})
+    );
+    m.position.set(x,y,z);
+    scene.add(m);
+}
+
+box(60,0.1,60,0,0,0,0x1a1a1a);
+box(60,0.1,60,0,5,0,0x0a0a0a);
+
+box(10,0.15,10,0,0.02,15,0x444400);
+box(15,0.15,35,-12.5,0.02,0,0x441111);
+box(15,0.15,35,12.5,0.02,0,0x111144);
+
+box(60,5,1,0,2.5,25.5);
+box(60,5,1,0,2.5,-25.5);
+box(1,5,60,-25.5,2.5,0);
+box(1,5,60,25.5,2.5,0);
+
+/* Doors */
+function labelTexture(text){
+    let canvas=document.createElement("canvas");
+    canvas.width=512;
+    canvas.height=128;
+    let ctx=canvas.getContext("2d");
+    ctx.fillStyle="#222";
+    ctx.fillRect(0,0,512,128);
+    ctx.fillStyle="#f59e0b";
+    ctx.font="bold 48px sans-serif";
+    ctx.textAlign="center";
+    ctx.textBaseline="middle";
+    ctx.fillText(text,256,64);
+    return new THREE.CanvasTexture(canvas);
+}
+
+function door(name,x,z,rot,color,label,dir=1){
+
+    let hinge=new THREE.Group();
+    hinge.position.set(x,1.6,z);
+    hinge.rotation.y=rot;
+    scene.add(hinge);
+
+    let mesh=new THREE.Mesh(
+        new THREE.BoxGeometry(1.9,3.2,0.15),
+        new THREE.MeshStandardMaterial({color})
+    );
+
+    mesh.position.set(0.95,0,0);
+    hinge.add(mesh);
+
+    let plate=new THREE.Mesh(
+        new THREE.PlaneGeometry(1.2,0.35),
+        new THREE.MeshBasicMaterial({map:labelTexture(label),transparent:true})
+    );
+    plate.position.set(0.95,0.9,0.09);
+    mesh.add(plate);
+
+    mesh.userData={
+        name,
+        open:false,
+        dir,
+        pivot:hinge,
+        start:rot
+    };
+
+    interactables.push(mesh);
+}
+
+/* Red wing doors */
+for(let i=0;i<5;i++){
+    let z=-14+(i*7);
+    door("Interview "+(i+1),-5,z,Math.PI/2,0x662222,"ROOM "+(i+1));
+    door("Cell "+(i+1),-19.5,z,-Math.PI/2,0x222222,"CELL "+(i+1),-1);
+}
+
+/* Admin */
+door("Control",5,-10,-Math.PI/2,0x222266,"CONTROL",-1);
+door("Command",5,10,-Math.PI/2,0x222266,"COMMAND",-1);
+door("Vault",19.5,15,Math.PI,0x444444,"VAULT");
+
+/* Controls */
+document.addEventListener("mousemove",e=>{
+    if(document.pointerLockElement===renderer.domElement){
+        yaw-=e.movementX*0.002;
+        pitch-=e.movementY*0.002;
+        pitch=Math.max(-Math.PI/2.2,Math.min(Math.PI/2.2,pitch));
+    }
+});
+
+document.addEventListener("keydown",e=>{
+    if(e.code==="KeyW") moveF=true;
+    if(e.code==="KeyS") moveB=true;
+    if(e.code==="KeyA") moveL=true;
+    if(e.code==="KeyD") moveR=true;
+});
+
+document.addEventListener("keyup",e=>{
+    if(e.code==="KeyW") moveF=false;
+    if(e.code==="KeyS") moveB=false;
+    if(e.code==="KeyA") moveL=false;
+    if(e.code==="KeyD") moveR=false;
+});
+
+renderer.domElement.addEventListener("click",()=>{
+    if(document.pointerLockElement!==renderer.domElement){
+        renderer.domElement.requestPointerLock();
+        return;
+    }
+    raycaster.setFromCamera(new THREE.Vector2(0,0),camera);
+    let hits=raycaster.intersectObjects(interactables);
+    if(hits.length>0 && hits[0].distance<4.5){
+        let d=hits[0].object.userData;
+        d.open=!d.open;
+    }
+});
+
+window.addEventListener("resize",()=>{
+    camera.aspect=window.innerWidth/window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth,window.innerHeight);
+});
+
+}
+
+/* Animation */
+function animate(){
+requestAnimationFrame(animate);
+
+if(document.pointerLockElement===renderer.domElement){
+
+camera.rotation.set(pitch,yaw,0,"YXZ");
+
+velocity.x-=velocity.x*10*0.016;
+velocity.z-=velocity.z*10*0.016;
+
+direction.z=Number(moveF)-Number(moveB);
+direction.x=Number(moveR)-Number(moveL);
+direction.normalize();
+
+if(moveF||moveB) velocity.z-=direction.z*65*0.016;
+if(moveL||moveR) velocity.x-=direction.x*65*0.016;
+
+camera.translateX(-velocity.x*0.016);
+camera.translateZ(velocity.z*0.016);
+camera.position.y=1.7;
+
+camera.position.x=Math.max(-23,Math.min(23,camera.position.x));
+camera.position.z=Math.max(-23,Math.min(23,camera.position.z));
+
+raycaster.setFromCamera(new THREE.Vector2(0,0),camera);
+let hits=raycaster.intersectObjects(interactables);
+if(hits.length>0 && hits[0].distance<4.5)
+interactionDiv.innerText="[CLICK] "+hits[0].object.userData.name;
+else
+interactionDiv.innerText="";
+}
+
+interactables.forEach(d=>{
+    let data=d.userData;
+    let target=data.open ? data.start+(Math.PI/2.2)*data.dir : data.start;
+    data.pivot.rotation.y=THREE.MathUtils.lerp(data.pivot.rotation.y,target,0.1);
+});
+
+renderer.render(scene,camera);
+}
+
+function togglePanel(){
+let info=document.getElementById("info");
+info.style.display=info.style.display==="none"?"block":"none";
+}
+</script>
+</body>
+</html>

@@ -1,12 +1,12 @@
-# LLM Mystery Game
+# Text-Based Mystery Game
 
-Welcome to the LLM Mystery Game repository. This project contains different prototypes and versions of the mystery game, separated by their core mechanics.
+This branch contains all the files related to the 2D text-based interactive versions of the mystery game.
 
-## Branches
+## Key Files
+* \0.91.html\ - The most recent stable version of the game.
+* \0.9.html\ - Previous stable version.
+* \entry.html\ / \entry2.html\ - Entry points or alternate versions.
+* \ull_gen.html\ / \ull_gen_0.13.5.html\ - Generated iterations.
+* \efactored/\ - Directory containing refactored versions.
 
-This repository is organized into distinct branches for each version of the game:
-
-* **[text-based]** - Contains the 2D text-based interactive versions of the game (e.g., v0.91, full_gen, entry).
-* **[3d]** - Contains the experimental 3D and FPS versions of the game (e.g., 3d0.1, fps01).
-
-Please switch to the respective branch to view the files.
+Feel free to explore the different iterations and prototypes in this branch!
