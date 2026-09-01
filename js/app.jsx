@@ -1,4 +1,4 @@
-const { useState, useEffect, useRef, useCallback } = React;
+﻿const { useState, useEffect, useRef, useCallback } = React;
 
 /* ================================================================
    MAIN APP
@@ -44,7 +44,7 @@ function App() {
         return () => window.removeEventListener('keydown', handler);
     }, []);
 
-    /* ── Mystery generation ── */
+    /* â”€â”€ Mystery generation â”€â”€ */
     const initMystery = async () => {
         setPhase('generating');
         const prompt = `Generate a murder mystery JSON for a manor house. Include: victim, victimProfile, location, weapon, motive, fullStory, timeline (array of timestamped strings), discoveryPhase (string), evidenceList (array of strings), investigativeActions (array of 4 objects: id, task, result), suspects (array of exactly 5 objects: id, name, role, secret, isKiller boolean, clueTrigger string). Output JSON ONLY, no explanation.`;
@@ -81,14 +81,14 @@ function App() {
         }
     };
 
-    /* ── Build Three.js scene once crime scene is ready ── */
+    /* â”€â”€ Build Three.js scene once crime scene is ready â”€â”€ */
     useEffect(() => {
         if (phase !== 'playing' || mountRef.current || !crimeScene) return;
         mountRef.current = true;
         buildScene(THREE, crimeScene, canvasRef.current, stateRef, setInteractText, setRoomName, minimapRef);
     }, [phase, crimeScene]);
 
-    /* ── LLM chat ── */
+    /* â”€â”€ LLM chat â”€â”€ */
     const chat = async (msg) => {
         if (!msg.trim() || isThinking) return;
         const s = activeSuspect;
@@ -121,13 +121,13 @@ function App() {
         }
     };
 
-    /* ── Screens ── */
+    /* â”€â”€ Screens â”€â”€ */
     if (phase === 'name') return <NameScreen onConfirm={(n) => { setPlayerName(n); setPhase('loading'); }} />;
     if (phase === 'loading' || phase === 'generating')
         return <LoadingScreen phase={phase} onStart={initMystery} playerName={playerName}
                     selectedModel={selectedModel} setSelectedModel={setSelectedModel} />;
 
-    /* ── Playing ── */
+    /* â”€â”€ Playing â”€â”€ */
     return (
         <div className="relative" style={{ width: '100vw', height: '100vh' }}>
 
@@ -138,7 +138,7 @@ function App() {
                 onClick={(e) => { if (!activeUI) e.target.closest('div').querySelector('canvas')?.requestPointerLock(); }}
             />
 
-            {/* ── HUD ── */}
+            {/* â”€â”€ HUD â”€â”€ */}
             <div className="hud-overlay">
                 <div className="crosshair" />
                 <div className="scanline" />
@@ -169,7 +169,7 @@ function App() {
                 {!activeUI && (
                     <div style={{ position:'absolute', bottom:'1.5rem', left:'50%', transform:'translateX(-50%)',
                         color:'rgba(255,255,255,0.2)', fontSize:'11px', letterSpacing:'0.15em', textTransform:'uppercase' }}>
-                        WASD / Click to move &nbsp;·&nbsp; Click NPC to interact &nbsp;·&nbsp; ESC to close panel
+                        WASD / Click to move &nbsp;Â·&nbsp; Click NPC to interact &nbsp;Â·&nbsp; ESC to close panel
                     </div>
                 )}
 
@@ -192,7 +192,7 @@ function App() {
                                 Close [ESC]
                             </button>
 
-                            {/* ── BRIEFING ── */}
+                            {/* â”€â”€ BRIEFING â”€â”€ */}
                             {activeUI === 'briefing' && crimeScene && (
                                 <div className="flex flex-col gap-8">
                                     <div className="noir-card" style={{ position:'relative', padding:'2rem' }}>
@@ -227,7 +227,7 @@ function App() {
                                             <div className="flex flex-col gap-2" style={{ borderLeft:'2px solid #27272a', paddingLeft:'1rem' }}>
                                                 {crimeScene.timeline?.map((evt, i) => (
                                                     <div key={i} className="text-xs text-zinc-500">
-                                                        <span className="text-amber">▸ </span>{evt}
+                                                        <span className="text-amber">â–¸ </span>{evt}
                                                     </div>
                                                 ))}
                                             </div>
@@ -244,7 +244,7 @@ function App() {
                                 </div>
                             )}
 
-                            {/* ── CHAT ── */}
+                            {/* â”€â”€ CHAT â”€â”€ */}
                             {activeUI === 'chat' && activeSuspect && (
                                 <div className="flex flex-col" style={{ height:'460px' }}>
                                     <div style={{ borderBottom:'1px solid #222', paddingBottom:'1rem', marginBottom:'1.25rem' }}>
@@ -288,13 +288,13 @@ function App() {
                                         onSubmit={(e) => { e.preventDefault(); chat(e.target.m.value); e.target.m.value = ''; }}
                                         className="flex gap-4"
                                     >
-                                        <input name="m" className="input-field" placeholder="Ask the suspect something…" autoFocus />
+                                        <input name="m" className="input-field" placeholder="Ask the suspect somethingâ€¦" autoFocus />
                                         <button type="submit" className="btn" disabled={isThinking}>Ask</button>
                                     </form>
                                 </div>
                             )}
 
-                            {/* ── FORENSIC TERMINAL ── */}
+                            {/* â”€â”€ FORENSIC TERMINAL â”€â”€ */}
                             {activeUI === 'actions' && crimeScene && (
                                 <div className="flex flex-col gap-6">
                                     <div>
@@ -334,13 +334,13 @@ function App() {
                                 </div>
                             )}
 
-                            {/* ── COMMISSIONER ── */}
+                            {/* â”€â”€ COMMISSIONER â”€â”€ */}
                             {activeUI === 'boss' && crimeScene && (
                                 <div className="text-center flex flex-col gap-8" style={{ padding:'1rem 0' }}>
                                     <div>
                                         <h2 className="font-typewriter uppercase" style={{ fontSize:'1.75rem', letterSpacing:'-0.02em' }}>Commissioner's Office</h2>
                                         <p className="text-zinc-500 italic" style={{ marginTop:'0.5rem', fontSize:'0.9rem' }}>
-                                            "One chance, Detective {playerName}. Name the killer — or walk away in shame."
+                                            "One chance, Detective {playerName}. Name the killer â€” or walk away in shame."
                                         </p>
                                     </div>
                                     <div className="grid grid-cols-2 gap-4" style={{ maxWidth:'480px', margin:'0 auto', width:'100%' }}>
@@ -368,7 +368,7 @@ function App() {
                 )}
             </div>
 
-            {/* ── WIN / LOSE screen ── */}
+            {/* â”€â”€ WIN / LOSE screen â”€â”€ */}
             {(activeUI === 'win' || activeUI === 'lose') && (
                 <div style={{
                     position:'absolute', inset:0, zIndex:100,
@@ -420,7 +420,7 @@ function NameScreen({ onConfirm }) {
                         <label className="text-xs text-zinc-500 uppercase tracking-widest font-bold">Detective Name</label>
                         <input
                             className="input-field"
-                            placeholder="Enter your name…"
+                            placeholder="Enter your nameâ€¦"
                             value={name}
                             onChange={e => setName(e.target.value)}
                             onKeyDown={e => e.key === 'Enter' && name.trim() && onConfirm(name.trim())}
@@ -461,7 +461,8 @@ function LoadingScreen({ phase, onStart, playerName, selectedModel, setSelectedM
                 const list = (data.models || []).map(m => m.name || m.model || String(m));
                 setModels(list);
                 if (list.length > 0) {
-                    setSelectedModel(prev => prev || list[0]);
+                    const defaultModel = list.find(m => m.includes("gemma-4-E4B")) || list[0];
+                    setSelectedModel(prev => prev || defaultModel);
                 }
                 setFetchState('done');
                 setFetchError('');
@@ -507,7 +508,7 @@ function LoadingScreen({ phase, onStart, playerName, selectedModel, setSelectedM
                                             border:'2px solid #27272a', borderTopColor:'var(--amber)',
                                             borderRadius:'50%'
                                         }} className="animate-spin" />
-                                        <p className="text-xs text-zinc-500">Connecting to Ollama…</p>
+                                        <p className="text-xs text-zinc-500">Connecting to Ollamaâ€¦</p>
                                     </div>
                                 )}
 
@@ -597,7 +598,7 @@ function LoadingScreen({ phase, onStart, playerName, selectedModel, setSelectedM
                                 borderRadius:'50%'
                             }} className="animate-spin" />
                             <p className="font-typewriter text-amber text-xs uppercase tracking-widest animate-pulse">
-                                Drafting the mystery…
+                                Drafting the mysteryâ€¦
                             </p>
                             <p className="text-xs text-zinc-500">Using {selectedModel}</p>
                         </div>
@@ -612,3 +613,4 @@ function LoadingScreen({ phase, onStart, playerName, selectedModel, setSelectedM
    MOUNT
 ================================================================ */
 ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+
