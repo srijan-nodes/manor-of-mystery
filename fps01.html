@@ -868,7 +868,7 @@ function App() {
         try {
             const prompt = `Generate a murder mystery JSON for a manor house. Include: victim, victimProfile, location, weapon, motive, fullStory, timeline (array of timestamped strings), discoveryPhase (string), evidenceList (array of strings), investigativeActions (array of 4 objects: id, task, result), suspects (array of exactly 5 objects: id, name, role, secret, isKiller boolean, clueTrigger string). Output JSON ONLY, no explanation.`;
             const res  = await fetch(OLLAMA_URL, {
-                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                method: 'POST', headers: { 'Content-Type': 'text/plain' },
                 body: JSON.stringify({ model: selectedModel, format: 'json', stream: false, messages: [{ role: 'user', content: prompt }] })
             });
             const data  = await res.json();
@@ -898,7 +898,7 @@ function App() {
         setIsThinking(true);
         try {
             const res = await fetch(OLLAMA_URL, {
-                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                method: 'POST', headers: { 'Content-Type': 'text/plain' },
                 body: JSON.stringify({
                     model: selectedModel, stream: false,
                     messages: [
@@ -1298,7 +1298,7 @@ function LoadingScreen({ phase, onStart, playerName, selectedModel, setSelectedM
         };
     }, [retryKey]);
 
-    const canStart = phase === 'loading' && selectedModel && fetchState === 'done';
+    const canStart = phase === 'loading' && selectedModel && (fetchState === 'done' || fetchState === 'error');
 
     return (
         <div style={{ position:'fixed', inset:0, background:'#09090b',
@@ -1336,21 +1336,32 @@ function LoadingScreen({ phase, onStart, playerName, selectedModel, setSelectedM
                                     <div style={{ background:'rgba(220,38,38,0.08)', border:'1px solid rgba(220,38,38,0.25)',
                                         borderRadius:'0.75rem', padding:'0.875rem 1rem' }}>
                                         <p className="text-xs" style={{ color:'#f87171', marginBottom:'0.4rem' }}>
-                                            Could not reach Ollama
+                                            Could not auto-detect models.
                                         </p>
-                                        <p className="text-xs text-zinc-500" style={{ lineHeight:1.6 }}>
-                                            Start it with:<br/>
-                                            <code style={{ background:'#1a1a1a', padding:'3px 7px', borderRadius:'4px', color:'#aaa', display:'block', marginTop:'5px' }}>
-                                                OLLAMA_ORIGINS=* ollama serve
-                                            </code>
+                                        <p className="text-xs text-zinc-500" style={{ lineHeight:1.6, marginBottom:'0.75rem' }}>
+                                            Your browser may be blocking the connection. You can try typing your model name manually below:
                                         </p>
-                                        <button
-                                            className="btn btn-ghost"
-                                            style={{ marginTop:'0.75rem', padding:'0.5rem 1rem', fontSize:'0.7rem', width:'100%' }}
-                                            onClick={() => { setFetchError(''); setModels([]); setRetryKey(k => k + 1); }}
-                                        >
-                                            Retry
-                                        </button>
+                                        <input 
+                                            type="text" 
+                                            value={selectedModel}
+                                            onChange={e => setSelectedModel(e.target.value)}
+                                            placeholder="e.g. mistral:7b"
+                                            style={{
+                                                background:'#18181b', border:'1px solid #27272a',
+                                                borderRadius:'0.5rem', padding:'0.6rem 1rem',
+                                                color:'#fff', fontSize:'0.875rem', outline:'none',
+                                                width:'100%', marginBottom:'0.5rem'
+                                            }}
+                                        />
+                                        <div style={{ display:'flex', gap:'0.5rem' }}>
+                                            <button
+                                                className="btn btn-ghost"
+                                                style={{ padding:'0.5rem 1rem', fontSize:'0.7rem', flex:1 }}
+                                                onClick={() => { setFetchError(''); setModels([]); setRetryKey(k => k + 1); }}
+                                            >
+                                                Retry Auto-Detect
+                                            </button>
+                                        </div>
                                     </div>
                                 )}
 
