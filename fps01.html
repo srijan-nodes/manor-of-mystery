@@ -868,7 +868,7 @@ function App() {
         try {
             const prompt = `Generate a murder mystery JSON for a manor house. Include: victim, victimProfile, location, weapon, motive, fullStory, timeline (array of timestamped strings), discoveryPhase (string), evidenceList (array of strings), investigativeActions (array of 4 objects: id, task, result), suspects (array of exactly 5 objects: id, name, role, secret, isKiller boolean, clueTrigger string). Output JSON ONLY, no explanation.`;
             const res  = await fetch(OLLAMA_URL, {
-                method: 'POST', headers: { 'Content-Type': 'text/plain' },
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ model: selectedModel, format: 'json', stream: false, messages: [{ role: 'user', content: prompt }] })
             });
             const data  = await res.json();
@@ -899,7 +899,7 @@ function App() {
         setIsThinking(true);
         try {
             const res = await fetch(OLLAMA_URL, {
-                method: 'POST', headers: { 'Content-Type': 'text/plain' },
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     model: selectedModel, stream: false,
                     messages: [
