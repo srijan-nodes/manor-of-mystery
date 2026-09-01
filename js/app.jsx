@@ -53,7 +53,7 @@ function App() {
             try {
                 const res = await fetch(OLLAMA_URL, {
                     method: 'POST', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ model: selectedModel, format: 'json', stream: false, messages: [{ role: 'user', content: prompt }] })
+                    body: JSON.stringify({ model: selectedModel, format: 'json', stream: false, options: { num_predict: 4096 }, messages: [{ role: 'user', content: prompt }] })
                 });
                 const data = await res.json();
                 const raw = data.message.content;
