@@ -47,22 +47,37 @@ function App() {
     /* ── Mystery generation ── */
     const initMystery = async () => {
         setPhase('generating');
-        try {
-            const prompt = `Generate a murder mystery JSON for a manor house. Include: victim, victimProfile, location, weapon, motive, fullStory, timeline (array of timestamped strings), discoveryPhase (string), evidenceList (array of strings), investigativeActions (array of 4 objects: id, task, result), suspects (array of exactly 5 objects: id, name, role, secret, isKiller boolean, clueTrigger string). Output JSON ONLY, no explanation.`;
-            const res  = await fetch(OLLAMA_URL, {
-                method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ model: selectedModel, format: 'json', stream: false, messages: [{ role: 'user', content: prompt }] })
-            });
-            const data  = await res.json();
-            const scene = JSON.parse(cleanJSON(data.message.content));
-            setCrimeScene(scene);
-            const h = {}; scene.suspects.forEach(s => h[s.id] = []);
-            setConversations(h);
-            setPhase('playing');
-        } catch (err) {
-            console.error("Init mystery error:", err);
-            alert("Failed to start game. " + err.message + "\n\nIf you see Status 404, the model you typed does not exist in Ollama. If it says Failed to fetch, your browser is blocking the connection.");
-            setPhase('loading');
+        const prompt = `Generate a murder mystery JSON for a manor house. Include: victim, victimProfile, location, weapon, motive, fullStory, timeline (array of timestamped strings), discoveryPhase (string), evidenceList (array of strings), investigativeActions (array of 4 objects: id, task, result), suspects (array of exactly 5 objects: id, name, role, secret, isKiller boolean, clueTrigger string). Output JSON ONLY, no explanation.`;
+
+        for (let attempt = 1; attempt <= 2; attempt++) {
+            try {
+                const res = await fetch(OLLAMA_URL, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ model: selectedModel, format: 'json', stream: false, messages: [{ role: 'user', content: prompt }] })
+                });
+                const data = await res.json();
+                const raw = data.message.content;
+                console.log("Raw LLM response (attempt " + attempt + "):", raw.substring(0, 500));
+                const cleaned = cleanJSON(raw);
+                const scene = JSON.parse(cleaned);
+                // Validate minimum structure
+                if (!scene.suspects || !Array.isArray(scene.suspects) || scene.suspects.length < 1) {
+                    throw new Error("Invalid mystery: missing suspects array");
+                }
+                setCrimeScene(scene);
+                const h = {}; scene.suspects.forEach(s => h[s.id] = []);
+                setConversations(h);
+                setPhase('playing');
+                return; // success
+            } catch (err) {
+                console.error(`Init mystery error (attempt ${attempt}):`, err);
+                if (attempt < 2) {
+                    console.log("Retrying mystery generation...");
+                    continue;
+                }
+                alert("Failed to generate mystery after 2 attempts.\n\n" + err.message + "\n\nTip: Try a larger model like gemma4:26b for more reliable JSON output.");
+                setPhase('loading');
+            }
         }
     };
 
