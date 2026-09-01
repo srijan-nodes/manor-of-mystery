@@ -1283,8 +1283,6 @@ function LoadingScreen({ phase, onStart, playerName, selectedModel, setSelectedM
         };
 
         fetchAvailableModels();
-        // Poll every 3s if not yet connected
-        timer = setInterval(fetchAvailableModels, 3000);
 
         return () => {
             active = false;
