@@ -1277,6 +1277,7 @@ function LoadingScreen({ phase, onStart, playerName, selectedModel, setSelectedM
                 if (active) {
                     setFetchState('error');
                     setFetchError('Could not reach Ollama at ' + OLLAMA_TAGS);
+                    setSelectedModel(prev => prev || "mistral:7b");
                 }
             }
         };
