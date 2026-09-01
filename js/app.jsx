@@ -68,13 +68,16 @@ function App() {
             console.log("Pass 1 story generated successfully");
             
             // Pass 2: Extract story into JSON structure
-            const jsonPrompt = `Based on the following mystery story, extract it into a structured JSON format with these exact fields: victim, victimProfile, location, weapon, motive, fullStory, timeline (array of timestamped strings), discoveryPhase (string), evidenceList (array of strings), investigativeActions (array of 4 objects: id, task, result), suspects (array of exactly 5 objects: id, name, role, secret, isKiller boolean, clueTrigger string).
+            const jsonPrompt = "Based on the following mystery story, extract it into a structured JSON format with these exact fields: victim, victimProfile, location, weapon, motive, fullStory, timeline (array of timestamped strings), discoveryPhase (string), evidenceList (array of strings), investigativeActions (array of 4 objects: id, task, result), suspects (array of exactly 5 objects: id, name, role, secret, isKiller boolean, clueTrigger string).
 
-CRITICAL RULE: The 'timeline' and 'discoveryPhase' fields are the initial police briefing given to the detective. They MUST NOT contain any spoilers about who the killer is, the secret motive, or the murder itself! They should only contain the public timeline of the evening and how the body was found.
+TONE AND SPOILER RULES:
+1. 'discoveryPhase': Write a 2-3 sentence atmospheric police report describing exactly how, where, and by whom the body was found. Write the actual report (e.g. "At 8:00 AM, the maid entered the study and found..."). Do NOT write meta-text like "This is a briefing...".
+2. 'victimProfile': Write a clinical, factual police file description (e.g., "Age 62. Wealthy antiquarian. Known to have gambling debts."). Do not use flowery novel-like prose.
+3. 'timeline': An array of public, known events leading up to the discovery (e.g., "20:00 - Dinner served"). DO NOT include the murder itself, the killer's actions, or exact times of death, as the detective hasn't investigated yet!
 
 Story: ${story}
 
-Output JSON ONLY, no explanation.`;
+Output JSON ONLY, no explanation.";
             
             for (let attempt = 1; attempt <= 2; attempt++) {
                 try {
@@ -737,6 +740,8 @@ function LoadingScreen({ phase, onStart, playerName, selectedModel, setSelectedM
    MOUNT
 ================================================================ */
 ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+
+
 
 
 
