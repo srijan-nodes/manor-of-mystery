@@ -1252,25 +1252,50 @@ function LoadingScreen({ phase, onStart, playerName, selectedModel, setSelectedM
     const [fetchError,  setFetchError]  = useState('');
     const [retryKey,    setRetryKey]    = useState(0);
 
-    /* Fetch available models from Ollama on mount / retry */
+    /* Fetch available models from Ollama with fallback and auto-polling */
     useEffect(() => {
-        setFetchState('loading');
-        fetch(OLLAMA_TAGS)
-            .then(r => {
-                if (!r.ok) throw new Error(`HTTP ${r.status}`);
-                return r.json();
-            })
-            .then(data => {
-                const list = (data.models || []).map(m => m.name || m.model || String(m));
-                setModels(list);
-                if (list.length > 0 && !selectedModel) setSelectedModel(list[0]);
-                setFetchState('done');
-            })
-            .catch(err => {
-                setFetchError(err.message);
+        let active = true;
+        const fetchAvailableModels = async () => {
+            setFetchState(prev => prev === 'done' ? 'done' : 'loading');
+            const urls = [
+                "http://127.0.0.1:11434/api/tags",
+                "http://localhost:11434/api/tags"
+            ];
+            for (const url of urls) {
+                try {
+                    const r = await fetch(url, { signal: AbortSignal.timeout(3000) });
+                    if (!r.ok) continue;
+                    const data = await r.json();
+                    if (!active) return;
+                    const list = (data.models || []).map(m => m.name || m.model || String(m));
+                    setModels(list);
+                    if (list.length > 0) {
+                        setSelectedModel(prev => prev || list[0]);
+                    }
+                    setFetchState('done');
+                    setFetchError('');
+                    return;
+                } catch (e) {}
+            }
+            if (active) {
                 setFetchState('error');
-            });
-    }, [retryKey]);
+                setFetchError('Could not reach Ollama at 127.0.0.1:11434 or localhost:11434');
+            }
+        };
+
+        fetchAvailableModels();
+        // Poll every 3s if not yet connected
+        const timer = setInterval(() => {
+            if (fetchState !== 'done') {
+                fetchAvailableModels();
+            }
+        }, 3000);
+
+        return () => {
+            active = false;
+            clearInterval(timer);
+        };
+    }, [retryKey, fetchState]);
 
     const canStart = phase === 'loading' && selectedModel && fetchState === 'done';
 
