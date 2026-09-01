@@ -1265,7 +1265,7 @@ function LoadingScreen({ phase, onStart, playerName, selectedModel, setSelectedM
             ];
             for (const url of urls) {
                 try {
-                    const r = await fetch(url, { signal: AbortSignal.timeout(3000) });
+                    const r = await fetch(url);
                     if (!r.ok) continue;
                     const data = await r.json();
                     if (!active) return;
@@ -1278,7 +1278,9 @@ function LoadingScreen({ phase, onStart, playerName, selectedModel, setSelectedM
                     setFetchError('');
                     if (timer) clearInterval(timer); // Stop polling on success
                     return;
-                } catch (e) {}
+                } catch (e) {
+                    console.error("Fetch to", url, "failed:", e);
+                }
             }
             if (active) {
                 setFetchState('error');
