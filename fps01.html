@@ -307,25 +307,39 @@ const cleanJSON = (str) => {
 /* ================================================================
    TEXTURE FACTORIES (canvas-based, no external assets needed)
 ================================================================ */
-function makeWoodTexture(tileSize = 128) {
+function makeWoodTexture(tileSize = 256) {
     const c = document.createElement('canvas');
     c.width = c.height = tileSize;
     const ctx = c.getContext('2d');
-    ctx.fillStyle = '#1a1208';
+    // Rich dark mahogany base
+    ctx.fillStyle = '#2a1a0e';
     ctx.fillRect(0, 0, tileSize, tileSize);
-    // plank lines
-    for (let y = 0; y < tileSize; y += 16) {
-        ctx.fillStyle = `rgba(0,0,0,${0.15 + Math.random() * 0.1})`;
-        ctx.fillRect(0, y, tileSize, 1);
+    // Plank lines with subtle color variation
+    const plankH = 32;
+    for (let y = 0; y < tileSize; y += plankH) {
+        const shade = 0.85 + Math.random() * 0.15;
+        ctx.fillStyle = `rgb(${Math.floor(42*shade)},${Math.floor(26*shade)},${Math.floor(14*shade)})`;
+        ctx.fillRect(0, y, tileSize, plankH - 1);
+        ctx.fillStyle = 'rgba(0,0,0,0.4)';
+        ctx.fillRect(0, y + plankH - 1, tileSize, 1);
     }
-    // grain
-    for (let i = 0; i < 80; i++) {
-        ctx.strokeStyle = `rgba(${80 + Math.random()*40},${50 + Math.random()*20},${10 + Math.random()*10},${0.1 + Math.random()*0.1})`;
-        ctx.lineWidth = 0.5;
+    // Wood grain
+    for (let i = 0; i < 200; i++) {
+        ctx.strokeStyle = `rgba(${60 + Math.random()*60},${30 + Math.random()*30},${5 + Math.random()*15},${0.06 + Math.random()*0.08})`;
+        ctx.lineWidth = 0.5 + Math.random();
         ctx.beginPath();
         const x0 = Math.random() * tileSize;
-        ctx.moveTo(x0, 0); ctx.lineTo(x0 + (Math.random()-0.5)*20, tileSize);
+        ctx.moveTo(x0, 0); ctx.lineTo(x0 + (Math.random()-0.5)*30, tileSize);
         ctx.stroke();
+    }
+    // Subtle knots
+    for (let i = 0; i < 3; i++) {
+        const kx = Math.random() * tileSize, ky = Math.random() * tileSize;
+        const grad = ctx.createRadialGradient(kx, ky, 0, kx, ky, 5 + Math.random()*5);
+        grad.addColorStop(0, 'rgba(20,10,2,0.5)');
+        grad.addColorStop(1, 'rgba(20,10,2,0)');
+        ctx.fillStyle = grad;
+        ctx.beginPath(); ctx.arc(kx, ky, 8, 0, Math.PI * 2); ctx.fill();
     }
     const t = new THREE.CanvasTexture(c);
     t.wrapS = t.wrapT = THREE.RepeatWrapping;
@@ -333,16 +347,31 @@ function makeWoodTexture(tileSize = 128) {
     return t;
 }
 
-function makeStoneTexture(tileSize = 128) {
+function makeStoneTexture(tileSize = 256) {
     const c = document.createElement('canvas');
     c.width = c.height = tileSize;
     const ctx = c.getContext('2d');
-    ctx.fillStyle = '#161618';
+    ctx.fillStyle = '#1e1e22';
     ctx.fillRect(0, 0, tileSize, tileSize);
-    for (let i = 0; i < 200; i++) {
+    // Stone block pattern
+    const blockH = 32, blockW = 64;
+    for (let row = 0; row < tileSize / blockH; row++) {
+        const offset = (row % 2) * (blockW / 2);
+        for (let col = -1; col < tileSize / blockW + 1; col++) {
+            const bx = col * blockW + offset, by = row * blockH;
+            const shade = 0.8 + Math.random() * 0.2;
+            ctx.fillStyle = `rgb(${Math.floor(30*shade)},${Math.floor(30*shade)},${Math.floor(34*shade)})`;
+            ctx.fillRect(bx + 1, by + 1, blockW - 2, blockH - 2);
+        }
+        // Mortar lines
+        ctx.fillStyle = 'rgba(10,10,12,0.8)';
+        ctx.fillRect(0, row * blockH, tileSize, 1);
+    }
+    // Surface noise
+    for (let i = 0; i < 400; i++) {
         const x = Math.random() * tileSize, y = Math.random() * tileSize;
-        const r = 1 + Math.random() * 3;
-        ctx.fillStyle = `rgba(${60 + Math.random()*30},${60 + Math.random()*30},${60 + Math.random()*30},0.3)`;
+        const r = 0.5 + Math.random() * 2;
+        ctx.fillStyle = `rgba(${50 + Math.random()*40},${50 + Math.random()*40},${55 + Math.random()*40},0.2)`;
         ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
     }
     const t = new THREE.CanvasTexture(c);
@@ -351,13 +380,51 @@ function makeStoneTexture(tileSize = 128) {
     return t;
 }
 
+function makeWallTexture(tileSize = 256) {
+    const c = document.createElement('canvas');
+    c.width = c.height = tileSize;
+    const ctx = c.getContext('2d');
+    // Dark plaster base
+    ctx.fillStyle = '#1c1c20';
+    ctx.fillRect(0, 0, tileSize, tileSize);
+    // Subtle plaster variation
+    for (let i = 0; i < 600; i++) {
+        const x = Math.random() * tileSize, y = Math.random() * tileSize;
+        const r = 1 + Math.random() * 4;
+        const v = 25 + Math.random() * 15;
+        ctx.fillStyle = `rgba(${v},${v},${v+5},0.15)`;
+        ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+    }
+    // Faint cracks
+    for (let i = 0; i < 5; i++) {
+        ctx.strokeStyle = `rgba(15,15,18,${0.3 + Math.random()*0.3})`;
+        ctx.lineWidth = 0.5 + Math.random() * 0.5;
+        ctx.beginPath();
+        let cx = Math.random() * tileSize, cy = Math.random() * tileSize;
+        ctx.moveTo(cx, cy);
+        for (let s = 0; s < 4 + Math.random() * 4; s++) {
+            cx += (Math.random() - 0.5) * 40;
+            cy += Math.random() * 30;
+            ctx.lineTo(cx, cy);
+        }
+        ctx.stroke();
+    }
+    // Wainscoting line (lower third)
+    ctx.fillStyle = 'rgba(0,0,0,0.25)';
+    ctx.fillRect(0, Math.floor(tileSize * 0.65), tileSize, 2);
+    const t = new THREE.CanvasTexture(c);
+    t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    t.repeat.set(4, 2);
+    return t;
+}
+
 /* ================================================================
    3D SCENE BUILDER
 ================================================================ */
 function buildScene(THREE, crimeScene, canvasEl, stateRef, setInteractionText, setRoomName, minimapRef) {
     const scene    = new THREE.Scene();
-    scene.background = new THREE.Color(0x050407);
-    scene.fog = new THREE.FogExp2(0x050407, 0.045);
+    scene.background = new THREE.Color(0x0a0a10);
+    scene.fog = new THREE.FogExp2(0x0a0a10, 0.025);
 
     const camera = new THREE.PerspectiveCamera(72, window.innerWidth / window.innerHeight, 0.1, 120);
     camera.position.set(0, 1.75, 20);
@@ -368,18 +435,22 @@ function buildScene(THREE, crimeScene, canvasEl, stateRef, setInteractionText, s
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.2;
+    renderer.outputEncoding = THREE.sRGBEncoding;
     canvasEl.appendChild(renderer.domElement);
 
     /* -- Textures -- */
     const woodTex  = makeWoodTexture();
     const stoneTex = makeStoneTexture();
+    const wallTex  = makeWallTexture();
 
     /* -- Materials -- */
-    const matWall   = new THREE.MeshStandardMaterial({ color: 0x1a1a1c, roughness: 0.9 });
-    const matFloor  = new THREE.MeshStandardMaterial({ map: woodTex,  roughness: 0.85 });
-    const matCeil   = new THREE.MeshStandardMaterial({ map: stoneTex, roughness: 0.95, color: 0x0d0d0f });
-    const matDoorDefault = new THREE.MeshStandardMaterial({ color: 0x2c1a0e, roughness: 0.8 });
-    const matDoorBlue    = new THREE.MeshStandardMaterial({ color: 0x0c1225, roughness: 0.7 });
+    const matWall   = new THREE.MeshStandardMaterial({ map: wallTex, roughness: 0.85, metalness: 0.02 });
+    const matFloor  = new THREE.MeshStandardMaterial({ map: woodTex, roughness: 0.7, metalness: 0.05 });
+    const matCeil   = new THREE.MeshStandardMaterial({ map: stoneTex, roughness: 0.9, color: 0x151518 });
+    const matDoorDefault = new THREE.MeshStandardMaterial({ color: 0x3a2010, roughness: 0.7, metalness: 0.05 });
+    const matDoorBlue    = new THREE.MeshStandardMaterial({ color: 0x0e1830, roughness: 0.6, metalness: 0.1 });
 
     /* ── Primitive helpers ── */
     const box = (w, h, d, x, y, z, mat) => {
@@ -397,8 +468,23 @@ function buildScene(THREE, crimeScene, canvasEl, stateRef, setInteractionText, s
     };
 
     /* ── Lighting ── */
-    scene.add(new THREE.AmbientLight(0x2a1f10, 0.6));
-    scene.add(new THREE.HemisphereLight(0x4a3010, 0x080408, 0.4));
+    // Brighter, warmer ambient for visibility
+    scene.add(new THREE.AmbientLight(0x483828, 1.2));
+    // Hemisphere: warm sky, cool ground bounce
+    scene.add(new THREE.HemisphereLight(0x806040, 0x202030, 0.8));
+
+    // Directional fill light (soft moonlight through windows)
+    const dirLight = new THREE.DirectionalLight(0x8090b0, 0.6);
+    dirLight.position.set(10, 12, 5);
+    dirLight.castShadow = true;
+    dirLight.shadow.mapSize.set(1024, 1024);
+    dirLight.shadow.camera.near = 0.5;
+    dirLight.shadow.camera.far = 60;
+    dirLight.shadow.camera.left = -25;
+    dirLight.shadow.camera.right = 25;
+    dirLight.shadow.camera.top = 25;
+    dirLight.shadow.camera.bottom = -25;
+    scene.add(dirLight);
 
     const ptLight = (x, y, z, color, intensity, dist) => {
         const l = new THREE.PointLight(color, intensity, dist);
@@ -408,15 +494,20 @@ function buildScene(THREE, crimeScene, canvasEl, stateRef, setInteractionText, s
         scene.add(l); return l;
     };
 
-    // Lobby chandelier
-    ptLight(0, 4.5, 10,  0xffd580, 3.5, 22);
-    // Interrogation wing
-    ptLight(-13, 4, 0,   0xff4444, 2.2, 28);
-    ptLight(-13, 4, -14, 0xdd3333, 1.8, 18);
-    ptLight(-13, 4,  14, 0xdd3333, 1.8, 18);
-    // Office wing
-    ptLight(13, 4, -8,   0x4466ff, 2.0, 20);
-    ptLight(13, 4,  8,   0x4466ff, 1.5, 16);
+    // Lobby chandelier — warm, bright
+    ptLight(0, 4.5, 10,  0xffd580, 5.0, 30);
+    ptLight(0, 4.5, 18,  0xffe0a0, 3.0, 18); // extra lobby fill
+    // Interrogation wing — red, moody but visible
+    ptLight(-13, 4, 0,   0xff6644, 3.5, 32);
+    ptLight(-13, 4, -14, 0xee4433, 2.8, 22);
+    ptLight(-13, 4,  14, 0xee4433, 2.8, 22);
+    ptLight(-8,  4,  0,  0xff8855, 1.5, 15); // corridor spill
+    // Office wing — blue-white, clinical
+    ptLight(13, 4, -8,   0x6688ff, 3.0, 24);
+    ptLight(13, 4,  8,   0x6688ff, 2.5, 20);
+    // Corridor — dim warm sconces
+    ptLight(0, 3.5, 0,   0xffcc80, 2.0, 16);
+    ptLight(0, 3.5, -10, 0xffcc80, 1.5, 14);
 
     /* ================================================================
        MANOR LAYOUT
@@ -431,9 +522,9 @@ function buildScene(THREE, crimeScene, canvasEl, stateRef, setInteractionText, s
     /*  ── ENTRANCE HALL (10 × 14 at z=10..24) ──  */
     plane(10, 14, 0, 0,    10, -Math.PI/2, matFloor);  // floor
     plane(10, 14, 0, CEIL_Y, 10, Math.PI/2, matCeil);  // ceiling
-    box(10, H, 0.3,  0, H/2, 24,  matWall);             // back wall
-    box(0.3, H, 14, -5, H/2, 10,  matWall);             // left wall
-    box(0.3, H, 14,  5, H/2, 10,  matWall);             // right wall
+    box(10, H, 0.5,  0, H/2, 24,  matWall);             // back wall
+    box(0.5, H, 14, -5, H/2, 10,  matWall);             // left wall
+    box(0.5, H, 14,  5, H/2, 10,  matWall);             // right wall
 
     /* Chandelier fixture */
     const chanBase = new THREE.Mesh(
@@ -457,18 +548,18 @@ function buildScene(THREE, crimeScene, canvasEl, stateRef, setInteractionText, s
     /*  ── MAIN CORRIDOR (4 × 30 at x=-2..2, z=-15..15) ──  */
     plane(4, 30,   0, 0,    0, -Math.PI/2, matFloor);
     plane(4, 30,   0, CEIL_Y, 0,  Math.PI/2, matCeil);
-    box(0.3, H, 30, -2, H/2, 0, matWall);
-    box(0.3, H, 30,  2, H/2, 0, matWall);
+    box(0.5, H, 30, -2, H/2, 0, matWall);
+    box(0.5, H, 30,  2, H/2, 0, matWall);
     // Far wall
-    box(4, H, 0.3,  0, H/2, -15, matWall);
+    box(4, H, 0.5,  0, H/2, -15, matWall);
 
     /*  ── LEFT WING — Interrogation (18 × 30, x=-2..-20) ──  */
     const LW_X = -11; // center
     plane(18, 30, LW_X, 0,    0, -Math.PI/2, matFloor);
     plane(18, 30, LW_X, CEIL_Y, 0,  Math.PI/2, matCeil);
-    box(0.3, H, 30, -20, H/2, 0, matWall);  // outer wall
-    box(18, H, 0.3, LW_X, H/2, -15, matWall); // back
-    box(18, H, 0.3, LW_X, H/2,  15, matWall); // front
+    box(0.5, H, 30, -20, H/2, 0, matWall);  // outer wall
+    box(18, H, 0.5, LW_X, H/2, -15, matWall); // back
+    box(18, H, 0.5, LW_X, H/2,  15, matWall); // front
 
     /* Cell dividers (5 cells, 6 apart) */
     for (let i = 0; i < 4; i++) {
@@ -497,9 +588,9 @@ function buildScene(THREE, crimeScene, canvasEl, stateRef, setInteractionText, s
     const RW_X = 11;
     plane(18, 20, RW_X, 0,    -2.5, -Math.PI/2, matFloor);
     plane(18, 20, RW_X, CEIL_Y, -2.5,  Math.PI/2, matCeil);
-    box(0.3, H, 20, 20, H/2, -2.5, matWall);  // outer wall
-    box(18, H, 0.3, RW_X, H/2, -12.5, matWall); // back
-    box(18, H, 0.3, RW_X, H/2,  7.5, matWall);  // front
+    box(0.5, H, 20, 20, H/2, -2.5, matWall);  // outer wall
+    box(18, H, 0.5, RW_X, H/2, -12.5, matWall); // back
+    box(18, H, 0.5, RW_X, H/2,  7.5, matWall);  // front
     // divider between office rooms
     box(7, H, 0.2, RW_X - 2, H/2, 0, matWall);
 
