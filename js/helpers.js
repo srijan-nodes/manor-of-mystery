@@ -4,8 +4,12 @@
 const fmt = (val) => {
     if (!val) return "";
     if (typeof val === 'string') return val;
-    if (typeof val === 'object')
-        return val.name || val.title || val.item || val.description || val.text || JSON.stringify(val);
+    if (typeof val === 'object') {
+        if (val.name || val.title || val.item || val.description || val.text) {
+            return val.name || val.title || val.item || val.description || val.text;
+        }
+        return Object.entries(val).map(([k, v]) => `${k.charAt(0).toUpperCase() + k.slice(1)}: ${v}`).join(' | ');
+    }
     return String(val);
 };
 
