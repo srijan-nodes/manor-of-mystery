@@ -1,0 +1,19 @@
+{
+    "parallel": false,
+    "tasks": [
+        {
+            "name": "Improve 3D Lighting",
+            "model": "gemma4:26b",
+            "file": "js/scene.js",
+            "instruction": "Add wall sconces (small orange point lights at y=2.5) every 6 units along the left and right walls of the main corridor. Each sconce should have a small emissive cube mesh (0.15 x 0.15 x 0.08) mounted on the wall to represent the fixture. Use warm color 0xffaa55 with intensity 1.2 and distance 8.",
+            "lang": "js"
+        },
+        {
+            "name": "Add Room Labels",
+            "model": "deepseek-r1:8b",
+            "file": "js/app.jsx",
+            "instruction": "In the HUD overlay, add a subtle compass indicator showing N/S/E/W based on the camera yaw angle stored in stateRef.current.yaw. Position it below the minimap.",
+            "lang": "jsx"
+        }
+    ]
+}

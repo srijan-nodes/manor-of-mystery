@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Manor of Whispers — 3D Detective</title>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Special+Elite&family=Inter:wght@300;400;700&display=swap" rel="stylesheet">
+
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+    <div id="root"></div>
+
+    <!-- Load JS modules in dependency order (plain JS, no build step) -->
+    <script src="js/config.js"></script>
+    <script src="js/helpers.js"></script>
+    <script src="js/textures.js"></script>
+    <script src="js/minimap.js"></script>
+    <script src="js/scene.js"></script>
+
+    <!-- React components (needs Babel for JSX) -->
+    <script type="text/babel" src="js/app.jsx"></script>
+</body>
+</html>
