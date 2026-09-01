@@ -68,7 +68,7 @@ function App() {
             console.log("Pass 1 story generated successfully");
             
             // Pass 2: Extract story into JSON structure
-            const jsonPrompt = "Based on the following mystery story, extract it into a structured JSON format with these exact fields: victim, victimProfile, location, weapon, motive, fullStory, timeline (array of timestamped strings), discoveryPhase (string), evidenceList (array of strings), investigativeActions (array of 4 objects: id, task, result), suspects (array of exactly 5 objects: id, name, role, secret, isKiller boolean, clueTrigger string).
+            const jsonPrompt = `Based on the following mystery story, extract it into a structured JSON format with these exact fields: victim, victimProfile, location, weapon, motive, fullStory, timeline (array of timestamped strings), discoveryPhase (string), evidenceList (array of strings), investigativeActions (array of 4 objects: id, task, result), suspects (array of exactly 5 objects: id, name, role, secret, isKiller boolean, clueTrigger string).
 
 TONE AND SPOILER RULES:
 1. 'discoveryPhase': Write a 2-3 sentence atmospheric police report describing exactly how, where, and by whom the body was found. Write the actual report (e.g. "At 8:00 AM, the maid entered the study and found..."). Do NOT write meta-text like "This is a briefing...".
@@ -77,7 +77,7 @@ TONE AND SPOILER RULES:
 
 Story: ${story}
 
-Output JSON ONLY, no explanation.";
+Output JSON ONLY, no explanation.`;
             
             for (let attempt = 1; attempt <= 2; attempt++) {
                 try {
@@ -740,6 +740,7 @@ function LoadingScreen({ phase, onStart, playerName, selectedModel, setSelectedM
    MOUNT
 ================================================================ */
 ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+
 
 
 
