@@ -877,8 +877,9 @@ function App() {
             const h = {}; scene.suspects.forEach(s => h[s.id] = []);
             setConversations(h);
             setPhase('playing');
-        } catch (e) {
-            alert("Could not reach Ollama. Make sure it is running with:\n\nOLLAMA_ORIGINS=* ollama serve\n\nThen refresh.");
+        } catch (err) {
+            console.error("Init mystery error:", err);
+            alert("Failed to start game. " + err.message + "\n\nIf you see Status 404, the model you typed does not exist in Ollama. If it says Failed to fetch, your browser is blocking the connection.");
             setPhase('loading');
         }
     };
