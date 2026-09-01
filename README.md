@@ -5,12 +5,33 @@ Built with [Three.js](https://threejs.org/) + React (Babel standalone), with an 
 
 ---
 
-## Gameplay
+## Quick Start (Automatic)
 
-Walk through a fully rendered 3D manor, interrogate suspects, run forensic analyses, and accuse the killer.
-Every case is **procedurally generated** by a local LLM — no two games are the same.
+Just double-click **start.bat** in this folder!
 
-### Controls
+It will:
+1. Check if Ollama is running (and launch ollama serve in the background if not).
+2. Host the game on http://localhost:8000.
+3. Automatically launch your default browser right into the game.
+
+---
+
+## Manual Start
+
+If you prefer starting manually:
+1. Ensure Ollama is running:
+   `ash
+   ollama serve
+   `
+2. Serve and open:
+   `ash
+   python -m http.server 8000
+   `
+   Then open http://localhost:8000/fps01.html in your browser.
+
+---
+
+## Controls
 
 | Action | Key / Input |
 |---|---|
@@ -18,33 +39,6 @@ Every case is **procedurally generated** by a local LLM — no two games are the s
 | Look | Mouse (pointer locked) |
 | Interact / Open door | Click |
 | Close panel | ESC |
-
----
-
-## File
-
-| File | Description |
-|---|---|
-| `fps01.html` | The complete game — open directly in a browser or local server |
-
----
-
-## Requirements
-
-1. **Ollama running**:
-   \\\ash
-   ollama serve
-   \\\
-   *(Or keep the standard Ollama desktop app running in the background).*
-
-2. **At least one model installed**:
-   \\\ash
-   ollama pull mistral:7b
-   # or llama3:8b, gemma2, etc.
-   \\\
-
-3. **Open the game**:
-   Open `fps01.html` directly in your browser (or serve with python -m http.server 8000) and click **Connect & Generate Case**.
 
 ---
 
