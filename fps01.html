@@ -283,8 +283,8 @@ const { useState, useEffect, useRef, useCallback } = React;
 /* ================================================================
    CONFIG
 ================================================================ */
-const OLLAMA_URL  = "http://127.0.0.1:11434/api/chat";
-const OLLAMA_TAGS = "http://127.0.0.1:11434/api/tags";
+const OLLAMA_URL  = "http://localhost:11434/api/chat";
+const OLLAMA_TAGS = "http://localhost:11434/api/tags";
 
 /* ================================================================
    HELPERS
@@ -868,7 +868,7 @@ function App() {
         try {
             const prompt = `Generate a murder mystery JSON for a manor house. Include: victim, victimProfile, location, weapon, motive, fullStory, timeline (array of timestamped strings), discoveryPhase (string), evidenceList (array of strings), investigativeActions (array of 4 objects: id, task, result), suspects (array of exactly 5 objects: id, name, role, secret, isKiller boolean, clueTrigger string). Output JSON ONLY, no explanation.`;
             const res  = await fetch(OLLAMA_URL, {
-                method: 'POST', headers: { 'Content-Type': 'text/plain' },
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ model: selectedModel, format: 'json', stream: false, messages: [{ role: 'user', content: prompt }] })
             });
             const data  = await res.json();
@@ -898,7 +898,7 @@ function App() {
         setIsThinking(true);
         try {
             const res = await fetch(OLLAMA_URL, {
-                method: 'POST', headers: { 'Content-Type': 'text/plain' },
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     model: selectedModel, stream: false,
                     messages: [
@@ -1259,32 +1259,25 @@ function LoadingScreen({ phase, onStart, playerName, selectedModel, setSelectedM
 
         const fetchAvailableModels = async () => {
             setFetchState(prev => prev === 'done' ? 'done' : 'loading');
-            const urls = [
-                "http://127.0.0.1:11434/api/tags?_t=" + Date.now(),
-                "http://localhost:11434/api/tags?_t=" + Date.now()
-            ];
-            for (const url of urls) {
-                try {
-                    const r = await fetch(url, { cache: 'no-store' });
-                    if (!r.ok) continue;
-                    const data = await r.json();
-                    if (!active) return;
-                    const list = (data.models || []).map(m => m.name || m.model || String(m));
-                    setModels(list);
-                    if (list.length > 0) {
-                        setSelectedModel(prev => prev || list[0]);
-                    }
-                    setFetchState('done');
-                    setFetchError('');
-                    if (timer) clearInterval(timer); // Stop polling on success
-                    return;
-                } catch (e) {
-                    console.error("Fetch to", url, "failed:", e);
+            try {
+                const r = await fetch(OLLAMA_TAGS);
+                if (!r.ok) throw new Error("Status " + r.status);
+                const data = await r.json();
+                if (!active) return;
+                const list = (data.models || []).map(m => m.name || m.model || String(m));
+                setModels(list);
+                if (list.length > 0) {
+                    setSelectedModel(prev => prev || list[0]);
                 }
-            }
-            if (active) {
-                setFetchState('error');
-                setFetchError('Could not reach Ollama at 127.0.0.1:11434 or localhost:11434');
+                setFetchState('done');
+                setFetchError('');
+                if (timer) clearInterval(timer);
+            } catch (e) {
+                console.error("Fetch to Ollama tags failed:", e);
+                if (active) {
+                    setFetchState('error');
+                    setFetchError('Could not reach Ollama at ' + OLLAMA_TAGS);
+                }
             }
         };
 
