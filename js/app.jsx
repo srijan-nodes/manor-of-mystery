@@ -106,7 +106,7 @@ function App() {
                     messages: [
                         {
                             role: 'system',
-                            content: `You are ${fmt(s.name)}, a suspect in a murder mystery. Your role: ${fmt(s.role)}. Your secret: "${fmt(s.secret)}". If the detective says or asks about "${fmt(s.clueTrigger)}", you nervously reveal the secret. Keep replies to 2 sentences maximum, and stay in character at all times.`
+                            content: `You are ${fmt(s.name)}, a suspect in a murder mystery. Your role: ${fmt(s.role)}. Your secret: "${fmt(s.secret)}". If the detective says or asks about "${fmt(s.clueTrigger)}", you nervously reveal the secret AND you MUST end your response with the exact bracketed tag [SECRET REVEALED]. Keep replies to 2 sentences maximum, and stay in character at all times.`
                         },
                         ...conversations[s.id],
                         { role: 'user', content: msg }
@@ -114,12 +114,16 @@ function App() {
                 })
             });
             const d = await res.json();
-            const reply = d.message.content;
-            setConversations(p => ({ ...p, [s.id]: [...p[s.id], { role: 'assistant', content: reply }] }));
-            if (reply.toLowerCase().includes(fmt(s.clueTrigger).toLowerCase())) {
+            let reply = d.message.content;
+            
+            // Check if the LLM outputted the confession tag
+            if (reply.includes('[SECRET REVEALED]')) {
+                reply = reply.replace('[SECRET REVEALED]', '').trim();
                 setEvidence(prev => [...new Set([...prev, `${fmt(s.name)} revealed: ${fmt(s.secret)}`])]);
                 setConfessed(prev => ({ ...prev, [s.id]: true }));
             }
+            
+            setConversations(p => ({ ...p, [s.id]: [...p[s.id], { role: 'assistant', content: reply }] }));
         } finally {
             setIsThinking(false);
         }
