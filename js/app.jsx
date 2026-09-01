@@ -92,7 +92,46 @@ function App() {
         buildScene(THREE, crimeScene, canvasRef.current, stateRef, setInteractText, setRoomName, minimapRef);
     }, [phase, crimeScene]);
 
-    /* â”€â”€ LLM chat â”€â”€ */
+    /* ── LLM chat ── */
+    const checkConfession = async (suspect, aiReply) => {
+        // 1. Keyword parsing (heuristic fallback)
+        const text = aiReply.toLowerCase();
+        const words = ['confess', 'admit', 'truth is', 'you caught me', 'secret is', 'did it'];
+        let heuristicMatch = words.some(w => text.includes(w));
+
+        // 2. Referee LLM Agent
+        try {
+            const prompt = `You are a detective game referee.
+The suspect's hidden secret is: "${fmt(suspect.secret)}"
+The suspect just said: "${aiReply}"
+Did the suspect reveal or strongly hint at this secret? 
+Reply with exactly one word: YES or NO.`;
+            
+            const res = await fetch(OLLAMA_URL, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    model: selectedModel,
+                    stream: false,
+                    options: { num_predict: 10, temperature: 0.1 },
+                    messages: [{ role: 'user', content: prompt }]
+                })
+            });
+            const data = await res.json();
+            const refereeDecision = data.message.content.trim().toUpperCase();
+            
+            if (refereeDecision.includes('YES') || heuristicMatch || aiReply.includes('[SECRET REVEALED]')) {
+                setEvidence(prev => [...new Set([...prev, `${fmt(suspect.name)} revealed: ${fmt(suspect.secret)}`])]);
+                setConfessed(prev => ({ ...prev, [suspect.id]: true }));
+            }
+        } catch (err) {
+            console.error("Referee agent failed:", err);
+            if (heuristicMatch || aiReply.includes('[SECRET REVEALED]')) {
+                setEvidence(prev => [...new Set([...prev, `${fmt(suspect.name)} revealed: ${fmt(suspect.secret)}`])]);
+                setConfessed(prev => ({ ...prev, [suspect.id]: true }));
+            }
+        }
+    };
+
     const chat = async (msg) => {
         if (!msg.trim() || isThinking) return;
         const s = activeSuspect;
@@ -116,14 +155,16 @@ function App() {
             const d = await res.json();
             let reply = d.message.content;
             
-            // Check if the LLM outputted the confession tag
+            // Clean up the tag if it's there
             if (reply.includes('[SECRET REVEALED]')) {
                 reply = reply.replace('[SECRET REVEALED]', '').trim();
-                setEvidence(prev => [...new Set([...prev, `${fmt(s.name)} revealed: ${fmt(s.secret)}`])]);
-                setConfessed(prev => ({ ...prev, [s.id]: true }));
             }
             
             setConversations(p => ({ ...p, [s.id]: [...p[s.id], { role: 'assistant', content: reply }] }));
+            
+            // Run guilt detection asynchronously
+            checkConfession(s, reply);
+            
         } finally {
             setIsThinking(false);
         }
