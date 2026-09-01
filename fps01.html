@@ -1252,10 +1252,15 @@ function LoadingScreen({ phase, onStart, playerName, selectedModel, setSelectedM
     const [fetchError,  setFetchError]  = useState('');
     const [retryKey,    setRetryKey]    = useState(0);
 
-    /* Fetch available models from Ollama with fallback and auto-polling */
+    /* Fetch available models from Ollama cleanly without re-render loop */
+    const isDoneRef = useRef(false);
+
     useEffect(() => {
         let active = true;
+        let timer = null;
+
         const fetchAvailableModels = async () => {
+            if (isDoneRef.current) return;
             setFetchState(prev => prev === 'done' ? 'done' : 'loading');
             const urls = [
                 "http://127.0.0.1:11434/api/tags",
@@ -1263,7 +1268,7 @@ function LoadingScreen({ phase, onStart, playerName, selectedModel, setSelectedM
             ];
             for (const url of urls) {
                 try {
-                    const r = await fetch(url, { signal: AbortSignal.timeout(3000) });
+                    const r = await fetch(url);
                     if (!r.ok) continue;
                     const data = await r.json();
                     if (!active) return;
@@ -1272,30 +1277,36 @@ function LoadingScreen({ phase, onStart, playerName, selectedModel, setSelectedM
                     if (list.length > 0) {
                         setSelectedModel(prev => prev || list[0]);
                     }
+                    isDoneRef.current = true;
                     setFetchState('done');
                     setFetchError('');
+                    if (timer) clearInterval(timer);
                     return;
                 } catch (e) {}
             }
-            if (active) {
+            if (active && !isDoneRef.current) {
                 setFetchState('error');
                 setFetchError('Could not reach Ollama at 127.0.0.1:11434 or localhost:11434');
             }
         };
 
+        isDoneRef.current = false;
         fetchAvailableModels();
-        // Poll every 3s if not yet connected
-        const timer = setInterval(() => {
-            if (fetchState !== 'done') {
+
+        // Slow poll (every 4s) only while not connected
+        timer = setInterval(() => {
+            if (!isDoneRef.current) {
                 fetchAvailableModels();
+            } else {
+                clearInterval(timer);
             }
-        }, 3000);
+        }, 4000);
 
         return () => {
             active = false;
-            clearInterval(timer);
+            if (timer) clearInterval(timer);
         };
-    }, [retryKey, fetchState]);
+    }, [retryKey]);
 
     const canStart = phase === 'loading' && selectedModel && fetchState === 'done';
 
