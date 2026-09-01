@@ -283,8 +283,8 @@ const { useState, useEffect, useRef, useCallback } = React;
 /* ================================================================
    CONFIG
 ================================================================ */
-const OLLAMA_URL = "http://localhost:11434/api/chat";
-const MODEL      = "mistral:7b";
+const OLLAMA_URL  = "http://localhost:11434/api/chat";
+const OLLAMA_TAGS = "http://localhost:11434/api/tags";
 
 /* ================================================================
    HELPERS
@@ -824,6 +824,7 @@ function drawMinimap(canvasRef, camera, interactables) {
 function App() {
     const [phase,         setPhase]         = useState('name');      // name | loading | generating | playing
     const [playerName,    setPlayerName]     = useState('');
+    const [selectedModel, setSelectedModel]  = useState('');
     const [crimeScene,    setCrimeScene]     = useState(null);
     const [activeUI,      setActiveUI]       = useState(null);
     const [activeSuspect, setActiveSuspect]  = useState(null);
@@ -868,7 +869,7 @@ function App() {
             const prompt = `Generate a murder mystery JSON for a manor house. Include: victim, victimProfile, location, weapon, motive, fullStory, timeline (array of timestamped strings), discoveryPhase (string), evidenceList (array of strings), investigativeActions (array of 4 objects: id, task, result), suspects (array of exactly 5 objects: id, name, role, secret, isKiller boolean, clueTrigger string). Output JSON ONLY, no explanation.`;
             const res  = await fetch(OLLAMA_URL, {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ model: MODEL, format: 'json', stream: false, messages: [{ role: 'user', content: prompt }] })
+                body: JSON.stringify({ model: selectedModel, format: 'json', stream: false, messages: [{ role: 'user', content: prompt }] })
             });
             const data  = await res.json();
             const scene = JSON.parse(cleanJSON(data.message.content));
@@ -899,7 +900,7 @@ function App() {
             const res = await fetch(OLLAMA_URL, {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    model: MODEL, stream: false,
+                    model: selectedModel, stream: false,
                     messages: [
                         {
                             role: 'system',
@@ -925,7 +926,8 @@ function App() {
     /* ── Screens ── */
     if (phase === 'name') return <NameScreen onConfirm={(n) => { setPlayerName(n); setPhase('loading'); }} />;
     if (phase === 'loading' || phase === 'generating')
-        return <LoadingScreen phase={phase} onStart={initMystery} playerName={playerName} />;
+        return <LoadingScreen phase={phase} onStart={initMystery} playerName={playerName}
+                    selectedModel={selectedModel} setSelectedModel={setSelectedModel} />;
 
     /* ── Playing ── */
     return (
@@ -1244,11 +1246,38 @@ function NameScreen({ onConfirm }) {
 /* ================================================================
    LOADING SCREEN
 ================================================================ */
-function LoadingScreen({ phase, onStart, playerName }) {
+function LoadingScreen({ phase, onStart, playerName, selectedModel, setSelectedModel }) {
+    const [models,      setModels]      = useState([]);
+    const [fetchState,  setFetchState]  = useState('idle'); // idle | loading | error
+    const [fetchError,  setFetchError]  = useState('');
+    const [retryKey,    setRetryKey]    = useState(0);
+
+    /* Fetch available models from Ollama on mount / retry */
+    useEffect(() => {
+        setFetchState('loading');
+        fetch(OLLAMA_TAGS)
+            .then(r => {
+                if (!r.ok) throw new Error(`HTTP ${r.status}`);
+                return r.json();
+            })
+            .then(data => {
+                const list = (data.models || []).map(m => m.name || m.model || String(m));
+                setModels(list);
+                if (list.length > 0 && !selectedModel) setSelectedModel(list[0]);
+                setFetchState('done');
+            })
+            .catch(err => {
+                setFetchError(err.message);
+                setFetchState('error');
+            });
+    }, [retryKey]);
+
+    const canStart = phase === 'loading' && selectedModel && fetchState === 'done';
+
     return (
         <div style={{ position:'fixed', inset:0, background:'#09090b',
             display:'flex', alignItems:'center', justifyContent:'center', padding:'1.5rem' }}>
-            <div style={{ maxWidth:'420px', width:'100%' }} className="animate-fade-in">
+            <div style={{ maxWidth:'440px', width:'100%' }} className="animate-fade-in">
                 <h1 className="font-typewriter text-amber uppercase tracking-widest"
                     style={{ fontSize:'2rem', textAlign:'center', marginBottom:'0.5rem' }}>
                     Manor of Whispers
@@ -1260,16 +1289,87 @@ function LoadingScreen({ phase, onStart, playerName }) {
                 <div className="noir-card flex flex-col gap-6">
                     {phase === 'loading' ? (
                         <>
-                            <p className="text-zinc-300 text-sm" style={{ lineHeight:1.7 }}>
-                                This game requires a local <strong style={{ color:'var(--amber)' }}>Ollama</strong> instance running <code style={{ background:'#1a1a1a', padding:'2px 6px', borderRadius:'4px' }}>mistral:7b</code>.
-                            </p>
-                            <p className="text-xs text-zinc-500" style={{ lineHeight:1.6 }}>
-                                Start Ollama with:<br/>
-                                <code style={{ background:'#1a1a1a', padding:'4px 8px', borderRadius:'4px', display:'block', marginTop:'6px', color:'#aaa' }}>
-                                    OLLAMA_ORIGINS=* ollama serve
-                                </code>
-                            </p>
-                            <button onClick={onStart} className="btn w-full" style={{ padding:'1.25rem' }}>
+                            {/* Model selector */}
+                            <div className="flex flex-col gap-2">
+                                <label className="text-xs text-zinc-500 uppercase tracking-widest font-bold">
+                                    Ollama Model
+                                </label>
+
+                                {fetchState === 'loading' && (
+                                    <div className="flex items-center gap-3" style={{ padding:'0.75rem 0' }}>
+                                        <div style={{
+                                            width:'1rem', height:'1rem', flexShrink:0,
+                                            border:'2px solid #27272a', borderTopColor:'var(--amber)',
+                                            borderRadius:'50%'
+                                        }} className="animate-spin" />
+                                        <p className="text-xs text-zinc-500">Connecting to Ollama…</p>
+                                    </div>
+                                )}
+
+                                {fetchState === 'error' && (
+                                    <div style={{ background:'rgba(220,38,38,0.08)', border:'1px solid rgba(220,38,38,0.25)',
+                                        borderRadius:'0.75rem', padding:'0.875rem 1rem' }}>
+                                        <p className="text-xs" style={{ color:'#f87171', marginBottom:'0.4rem' }}>
+                                            Could not reach Ollama
+                                        </p>
+                                        <p className="text-xs text-zinc-500" style={{ lineHeight:1.6 }}>
+                                            Start it with:<br/>
+                                            <code style={{ background:'#1a1a1a', padding:'3px 7px', borderRadius:'4px', color:'#aaa', display:'block', marginTop:'5px' }}>
+                                                OLLAMA_ORIGINS=* ollama serve
+                                            </code>
+                                        </p>
+                                        <button
+                                            className="btn btn-ghost"
+                                            style={{ marginTop:'0.75rem', padding:'0.5rem 1rem', fontSize:'0.7rem', width:'100%' }}
+                                            onClick={() => { setFetchError(''); setModels([]); setRetryKey(k => k + 1); }}
+                                        >
+                                            Retry
+                                        </button>
+                                    </div>
+                                )}
+
+                                {fetchState === 'done' && models.length === 0 && (
+                                    <div style={{ background:'rgba(245,158,11,0.07)', border:'1px solid rgba(245,158,11,0.2)',
+                                        borderRadius:'0.75rem', padding:'0.875rem 1rem' }}>
+                                        <p className="text-xs text-amber">No models found.</p>
+                                        <p className="text-xs text-zinc-500" style={{ marginTop:'0.3rem', lineHeight:1.5 }}>
+                                            Pull a model first:<br/>
+                                            <code style={{ background:'#1a1a1a', padding:'3px 7px', borderRadius:'4px', color:'#aaa', display:'block', marginTop:'5px' }}>
+                                                ollama pull mistral:7b
+                                            </code>
+                                        </p>
+                                    </div>
+                                )}
+
+                                {fetchState === 'done' && models.length > 0 && (
+                                    <select
+                                        value={selectedModel}
+                                        onChange={e => setSelectedModel(e.target.value)}
+                                        style={{
+                                            background:'#18181b', border:'1px solid #27272a',
+                                            borderRadius:'0.75rem', padding:'0.875rem 1rem',
+                                            color:'#fff', fontSize:'0.875rem', outline:'none',
+                                            cursor:'pointer', width:'100%',
+                                            appearance:'none',
+                                            backgroundImage:`url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%2371717a' d='M6 8L1 3h10z'/%3E%3C/svg%3E")`,
+                                            backgroundRepeat:'no-repeat',
+                                            backgroundPosition:'right 1rem center',
+                                            paddingRight:'2.5rem',
+                                        }}
+                                    >
+                                        {models.map(m => (
+                                            <option key={m} value={m}>{m}</option>
+                                        ))}
+                                    </select>
+                                )}
+                            </div>
+
+                            <button
+                                onClick={onStart}
+                                className="btn w-full"
+                                style={{ padding:'1.25rem' }}
+                                disabled={!canStart}
+                            >
                                 Connect &amp; Generate Case
                             </button>
                         </>
@@ -1283,6 +1383,7 @@ function LoadingScreen({ phase, onStart, playerName }) {
                             <p className="font-typewriter text-amber text-xs uppercase tracking-widest animate-pulse">
                                 Drafting the mystery…
                             </p>
+                            <p className="text-xs text-zinc-500">Using {selectedModel}</p>
                         </div>
                     )}
                 </div>
