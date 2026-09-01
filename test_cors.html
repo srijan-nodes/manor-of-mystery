@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html>
+<body style="background:#111; color:#eee; font-family:sans-serif; padding:2rem;">
+    <h2>Ollama Connection Test</h2>
+    <button onclick="testConnection()" style="padding:10px; font-size:16px;">Test Connection</button>
+    <pre id="log" style="background:#222; padding:10px; margin-top:20px; white-space:pre-wrap; border-radius:5px;"></pre>
+
+    <script>
+        function log(msg) {
+            document.getElementById('log').innerText += msg + '\n';
+        }
+
+        async function testConnection() {
+            document.getElementById('log').innerText = '';
+            const url = 'http://localhost:11434/api/tags';
+            
+            log('1. Testing GET /api/tags...');
+            try {
+                const res = await fetch(url);
+                log('   SUCCESS: Status ' + res.status);
+            } catch(e) {
+                log('   FAILED: ' + e.name + ' - ' + e.message);
+                log('   Note: This usually means browser security blocked the request.');
+            }
+
+            const chatUrl = 'http://localhost:11434/api/chat';
+            log('\n2. Testing POST /api/chat...');
+            try {
+                const res = await fetch(chatUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        model: 'deepseek-r1:8b',
+                        messages: [{role: 'user', content: 'test'}],
+                        stream: false
+                    })
+                });
+                log('   SUCCESS: Status ' + res.status);
+            } catch(e) {
+                log('   FAILED: ' + e.name + ' - ' + e.message);
+            }
+        }
+    </script>
+</body>
+</html>
