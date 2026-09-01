@@ -49,42 +49,71 @@ function App() {
     }, []);
 
     /* ── Mystery generation ── */
+        /* ── Mystery generation ── */
+    /* ── Mystery generation ── */
     const initMystery = async () => {
         setPhase('generating');
-        const prompt = `Generate a murder mystery JSON for a manor house. Include: victim, victimProfile, location, weapon, motive, fullStory, timeline (array of timestamped strings), discoveryPhase (string), evidenceList (array of strings), investigativeActions (array of 4 objects: id, task, result), suspects (array of exactly 5 objects: id, name, role, secret, isKiller boolean, clueTrigger string). Output JSON ONLY, no explanation.`;
+        
+        // Pass 1: Generate rich story content (no JSON)
+        const storyPrompt = "Act as a master mystery novelist writing a Victorian-era detective game set in a grand manor. Create a rich story with a compelling victim, dark motives, red herrings, and 5 distinct suspects. Include detailed descriptions of the crime scene, timeline of events, and character secrets. Write a compelling full story narrative. Do NOT output JSON. Just write the story.";
+        
+        try {
+            const storyRes = await fetch(OLLAMA_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ model: selectedModel, stream: false, options: { num_predict: 4096 }, messages: [{ role: 'user', content: storyPrompt }] })
+            });
+            const storyData = await storyRes.json();
+            const story = storyData.message.content;
+            console.log("Pass 1 story generated successfully");
+            
+            // Pass 2: Extract story into JSON structure
+            const jsonPrompt = `Based on the following mystery story, extract it into a structured JSON format with these exact fields: victim, victimProfile, location, weapon, motive, fullStory, timeline (array of timestamped strings), discoveryPhase (string), evidenceList (array of strings), investigativeActions (array of 4 objects: id, task, result), suspects (array of exactly 5 objects: id, name, role, secret, isKiller boolean, clueTrigger string).
 
-        for (let attempt = 1; attempt <= 2; attempt++) {
-            try {
-                const res = await fetch(OLLAMA_URL, {
-                    method: 'POST', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ model: selectedModel, format: 'json', stream: false, options: { num_predict: 4096 }, messages: [{ role: 'user', content: prompt }] })
-                });
-                const data = await res.json();
-                const raw = data.message.content;
-                console.log("Raw LLM response (attempt " + attempt + "):", raw.substring(0, 500));
-                const cleaned = cleanJSON(raw);
-                const scene = JSON.parse(cleaned);
-                // Validate minimum structure
-                if (!scene.suspects || !Array.isArray(scene.suspects) || scene.suspects.length < 1) {
-                    throw new Error("Invalid mystery: missing suspects array");
+CRITICAL RULE: The 'timeline' and 'discoveryPhase' fields are the initial police briefing given to the detective. They MUST NOT contain any spoilers about who the killer is, the secret motive, or the murder itself! They should only contain the public timeline of the evening and how the body was found.
+
+Story: ${story}
+
+Output JSON ONLY, no explanation.`;
+            
+            for (let attempt = 1; attempt <= 2; attempt++) {
+                try {
+                    const res = await fetch(OLLAMA_URL, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ model: selectedModel, format: 'json', stream: false, options: { num_predict: 4096 }, messages: [{ role: 'user', content: jsonPrompt }] })
+                    });
+                    const data = await res.json();
+                    const raw = data.message.content;
+                    console.log("Pass 2 raw LLM response (attempt " + attempt + "):", raw.substring(0, 500));
+                    const cleaned = cleanJSON(raw);
+                    const scene = JSON.parse(cleaned);
+                    // Validate minimum structure
+                    if (!scene.suspects || !Array.isArray(scene.suspects) || scene.suspects.length < 1) {
+                        throw new Error("Invalid mystery: missing suspects array");
+                    }
+                    setCrimeScene(scene);
+                    const h = {}; scene.suspects.forEach(s => h[s.id] = []);
+                    setConversations(h);
+                    setPhase('playing');
+                    return; // success
+                } catch (err) {
+                    console.error("Init mystery error (attempt " + attempt + "):", err);
+                    if (attempt < 2) {
+                        console.log("Retrying mystery generation...");
+                        continue;
+                    }
+                    alert("Failed to generate mystery after 2 attempts.\n\n" + err.message + "\n\nTip: Try a larger model like gemma4:26b for more reliable JSON output.");
+                    setPhase('loading');
+                    return;
                 }
-                setCrimeScene(scene);
-                const h = {}; scene.suspects.forEach(s => h[s.id] = []);
-                setConversations(h);
-                setPhase('playing');
-                return; // success
-            } catch (err) {
-                console.error(`Init mystery error (attempt ${attempt}):`, err);
-                if (attempt < 2) {
-                    console.log("Retrying mystery generation...");
-                    continue;
-                }
-                alert("Failed to generate mystery after 2 attempts.\n\n" + err.message + "\n\nTip: Try a larger model like gemma4:26b for more reliable JSON output.");
-                setPhase('loading');
             }
+        } catch (err) {
+            console.error("Pass 1 story generation failed:", err);
+            alert("Failed to generate story.\n\n" + err.message);
+            setPhase('loading');
         }
     };
-
     /* ── Build Three.js scene once crime scene is ready ── */
     useEffect(() => {
         if (phase !== 'playing' || mountRef.current || !crimeScene) return;
@@ -252,7 +281,7 @@ Reply with exactly one word: YES or NO.`;
                                         </span>
                                         <p style={{ fontSize:'1.05rem', color:'#c4c4c8', fontStyle:'italic',
                                             lineHeight:1.85, paddingLeft:'3.5rem', fontWeight:300 }}>
-                                            {fmt(crimeScene.fullStory)}
+                                            {fmt(crimeScene.discoveryPhase)}
                                         </p>
                                     </div>
                                     <div className="grid grid-cols-3 gap-8">
@@ -263,8 +292,8 @@ Reply with exactly one word: YES or NO.`;
                                         </div>
                                         <div className="flex flex-col gap-4">
                                             <div>
-                                                <p className="text-xs uppercase tracking-widest text-zinc-500 font-bold" style={{ marginBottom:'0.3rem' }}>Motive</p>
-                                                <p className="text-zinc-300 italic">"{fmt(crimeScene.motive)}"</p>
+                                                <p className="text-xs uppercase tracking-widest text-zinc-500 font-bold" style={{ marginBottom:'0.3rem' }}>Crime Scene</p>
+                                                <p className="text-zinc-300 italic">{fmt(crimeScene.location)}</p>
                                             </div>
                                             <div>
                                                 <p className="text-xs uppercase tracking-widest text-zinc-500 font-bold" style={{ marginBottom:'0.3rem' }}>Weapon</p>
@@ -708,5 +737,7 @@ function LoadingScreen({ phase, onStart, playerName, selectedModel, setSelectedM
    MOUNT
 ================================================================ */
 ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+
+
 
 
