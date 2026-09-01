@@ -25,29 +25,32 @@ Every case is **procedurally generated** by a local LLM — no two games are the s
 
 | File | Description |
 |---|---|
-| `fps01.html` | The complete game — open directly in a browser |
+| `fps01.html` | The complete game — open directly in a browser or local server |
 
 ---
 
 ## Requirements
 
-This game requires a local [Ollama](https://ollama.com/) instance with `mistral:7b` pulled.
+1. **Ollama running**:
+   \\\ash
+   ollama serve
+   \\\
+   *(Or keep the standard Ollama desktop app running in the background).*
 
-\\\ash
-# Pull the model (once)
-ollama pull mistral:7b
+2. **At least one model installed**:
+   \\\ash
+   ollama pull mistral:7b
+   # or llama3:8b, gemma2, etc.
+   \\\
 
-# Start Ollama with CORS enabled
-OLLAMA_ORIGINS=* ollama serve
-\\\
-
-Then open `fps01.html` in your browser and click **Connect & Generate Case**.
+3. **Open the game**:
+   Open `fps01.html` directly in your browser (or serve with python -m http.server 8000) and click **Connect & Generate Case**.
 
 ---
 
 ## Architecture
 
 - **Rendering**: Three.js r128 — FPS camera, shadow maps, canvas-generated textures (wood floors, stone ceilings)
-- **UI**: React 18 via Babel standalone — all panels are React components overlaid on the canvas
-- **LLM**: Ollama local API — generates the full mystery (victim, suspects, secrets, timeline) on demand
+- **UI**: React 18 via Babel standalone — dynamic model dropdown fetching available models directly from Ollama
+- **LLM**: Ollama local API (/api/tags and /api/chat)
 - **Map**: Multi-room manor with Entrance Hall, Main Corridor, Interrogation Wing, Forensic Lab, and Commissioner's Office
