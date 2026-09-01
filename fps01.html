@@ -3,637 +3,1298 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Manor of Whispers FPS - Detective Srijan Das</title>
-    
-    <!-- Dependencies (Ensure these are locally cached or downloaded for true offline use) -->
+    <title>Manor of Whispers — 3D Detective</title>
+
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    
     <link href="https://fonts.googleapis.com/css2?family=Special+Elite&family=Inter:wght@300;400;700&display=swap" rel="stylesheet">
 
     <style>
-        /* --- NATIVE CSS RESET & BASE --- */
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { 
-            margin: 0; 
-            overflow: hidden; 
-            background-color: #000; 
-            font-family: 'Inter', sans-serif; 
-            color: #eee; 
+        /* ============================================================
+           RESET & BASE
+        ============================================================ */
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            margin: 0;
+            overflow: hidden;
+            background: #09090b;
+            font-family: 'Inter', sans-serif;
+            color: #eee;
             user-select: none;
         }
         canvas { display: block; }
 
-        /* --- DESIGN TOKENS --- */
+        /* ============================================================
+           DESIGN TOKENS
+        ============================================================ */
         :root {
-            --bg-dark: #09090b;
-            --bg-panel: rgba(10, 10, 15, 0.98);
+            --bg-dark:    #09090b;
+            --bg-panel:   rgba(10, 10, 15, 0.98);
             --border-zinc: #3f3f46;
-            --amber-500: #f59e0b;
-            --red-600: #dc2626;
-            --zinc-500: #71717a;
-            --zinc-900: #18181b;
-            --glass-bg: rgba(20, 20, 25, 0.8);
+            --amber:       #f59e0b;
+            --red:         #dc2626;
+            --zinc-500:    #71717a;
+            --zinc-900:    #18181b;
+            --glass-bg:    rgba(15, 15, 20, 0.82);
         }
 
         .font-typewriter { font-family: 'Special Elite', cursive; }
 
-        /* --- HUD & UI OVERLAYS --- */
-        .hud-overlay { 
-            position: absolute; 
-            top: 0; 
-            left: 0; 
-            width: 100%; 
-            height: 100%; 
-            pointer-events: none; 
+        /* ============================================================
+           FIXED ANIMATIONS (Tailwind not loaded, define manually)
+        ============================================================ */
+        @keyframes spin   { to { transform: rotate(360deg); } }
+        @keyframes pulse  { 0%,100% { opacity: 1; } 50% { opacity: .4; } }
+        @keyframes fade-in {
+            from { opacity: 0; transform: translateY(10px); }
+            to   { opacity: 1; transform: translateY(0); }
         }
-        
+        @keyframes typing {
+            0%,80%,100% { transform: scale(0); }
+            40%         { transform: scale(1); }
+        }
+        @keyframes scanmove {
+            0%   { background-position: 0 0; }
+            100% { background-position: 0 4px; }
+        }
+
+        .animate-spin    { animation: spin   0.9s linear infinite; }
+        .animate-pulse   { animation: pulse  2s   ease-in-out infinite; }
+        .animate-fade-in { animation: fade-in 0.35s ease-out forwards; }
+
+        /* ============================================================
+           HUD & OVERLAYS
+        ============================================================ */
+        .hud-overlay {
+            position: absolute; top: 0; left: 0;
+            width: 100%; height: 100%;
+            pointer-events: none;
+        }
         .ui-element { pointer-events: auto; }
 
-        .crosshair { 
-            position: absolute; 
-            top: 50%; 
-            left: 50%; 
-            width: 8px; 
-            height: 8px; 
-            background: rgba(255,255,255,0.5); 
-            transform: translate(-50%, -50%); 
-            border-radius: 50%; 
-            border: 1px solid #000; 
+        .crosshair {
+            position: absolute; top: 50%; left: 50%;
+            width: 14px; height: 14px;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+        }
+        .crosshair::before, .crosshair::after {
+            content: '';
+            position: absolute;
+            background: rgba(255,255,255,0.75);
+        }
+        .crosshair::before { width: 2px; height: 14px; left: 6px; top: 0; }
+        .crosshair::after  { width: 14px; height: 2px; left: 0; top: 6px; }
+
+        .scanline {
+            position: absolute; width: 100%; height: 100%;
+            background: repeating-linear-gradient(
+                to bottom,
+                transparent 0px,
+                transparent 3px,
+                rgba(0,0,0,0.03) 3px,
+                rgba(0,0,0,0.03) 4px
+            );
+            pointer-events: none;
         }
 
-        .interaction-prompt { 
-            position: absolute; 
-            bottom: 30%; 
-            left: 50%; 
-            transform: translateX(-50%); 
-            color: #fbbf24; 
-            font-weight: bold; 
-            text-shadow: 2px 2px #000; 
-            font-size: 14px; 
-            letter-spacing: 0.1em; 
+        .interaction-prompt {
+            position: absolute; bottom: 28%; left: 50%;
+            transform: translateX(-50%);
+            color: var(--amber);
+            font-weight: 700; font-size: 13px;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            text-shadow: 0 0 12px rgba(245,158,11,0.6), 1px 1px 3px #000;
+            border: 1px solid rgba(245,158,11,0.3);
+            background: rgba(0,0,0,0.5);
+            padding: 6px 16px; border-radius: 6px;
+            backdrop-filter: blur(4px);
+        }
+
+        .room-label {
+            position: absolute; bottom: 1.5rem; left: 1.5rem;
+            color: rgba(255,255,255,0.35);
+            font-size: 11px; letter-spacing: 0.2em;
             text-transform: uppercase;
         }
 
-        .glass { 
-            background: var(--glass-bg); 
-            backdrop-filter: blur(12px); 
-            border: 1px solid rgba(255,255,255,0.1); 
-            padding: 1rem;
-            border-radius: 0.75rem;
+        /* ============================================================
+           MINIMAP
+        ============================================================ */
+        #minimap {
+            position: absolute; bottom: 1.5rem; right: 1.5rem;
+            pointer-events: none;
+            border: 1px solid rgba(255,255,255,0.12);
+            border-radius: 8px;
+            background: rgba(0,0,0,0.55);
+            backdrop-filter: blur(6px);
         }
 
-        .ui-panel { 
-            pointer-events: auto; 
-            background: var(--bg-panel); 
-            border: 1px solid var(--border-zinc); 
-            box-shadow: 0 0 50px rgba(0,0,0,0.5); 
+        /* ============================================================
+           GLASS CARD
+        ============================================================ */
+        .glass {
+            background: var(--glass-bg);
+            backdrop-filter: blur(14px);
+            border: 1px solid rgba(255,255,255,0.08);
+            padding: 1rem; border-radius: 0.75rem;
+        }
+
+        /* ============================================================
+           MODAL PANEL
+        ============================================================ */
+        .ui-panel {
+            pointer-events: auto;
+            background: var(--bg-panel);
+            border: 1px solid var(--border-zinc);
+            box-shadow: 0 0 60px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.03);
             color: #fff;
             padding: 2.5rem;
             border-radius: 1.5rem;
-            width: 100%;
-            max-width: 900px;
+            width: 100%; max-width: 920px;
             position: relative;
         }
 
-        /* --- LAYOUT UTILITIES --- */
-        .flex { display: flex; }
-        .flex-col { flex-direction: column; }
-        .justify-between { justify-content: space-between; }
-        .items-center { align-items: center; }
-        .items-end { align-items: flex-end; }
-        .gap-2 { gap: 0.5rem; }
-        .gap-4 { gap: 1rem; }
-        .gap-8 { gap: 2rem; }
-        .grid { display: grid; }
-        .grid-cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-        .grid-cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-
-        /* --- TYPOGRAPHY --- */
-        .uppercase { text-transform: uppercase; }
-        .italic { font-style: italic; }
-        .font-bold { font-weight: 700; }
-        .tracking-widest { letter-spacing: 0.1em; }
-        .text-xs { font-size: 0.75rem; }
-        .text-sm { font-size: 0.875rem; }
-        .text-xl { font-size: 1.25rem; }
-        .text-3xl { font-size: 1.875rem; }
-        .text-6xl { font-size: 3.75rem; }
-        .text-amber { color: var(--amber-500); }
-        .text-zinc-500 { color: var(--zinc-500); }
-        .text-zinc-300 { color: #d4d4d8; }
-
-        /* --- COMPONENTS --- */
+        /* ============================================================
+           COMPONENTS
+        ============================================================ */
         .btn {
-            background: var(--amber-500);
-            color: #fff;
-            border: none;
-            padding: 1rem 1.5rem;
-            border-radius: 0.75rem;
-            font-weight: 700;
-            cursor: pointer;
-            text-transform: uppercase;
-            font-size: 0.75rem;
-            transition: opacity 0.2s;
+            background: var(--amber); color: #000;
+            border: none; padding: 1rem 1.5rem;
+            border-radius: 0.75rem; font-weight: 700;
+            cursor: pointer; text-transform: uppercase;
+            font-size: 0.75rem; letter-spacing: 0.1em;
+            transition: opacity 0.15s, transform 0.1s;
         }
-        .btn:hover { opacity: 0.9; }
-        .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+        .btn:hover  { opacity: 0.88; transform: translateY(-1px); }
+        .btn:active { transform: translateY(0); }
+        .btn:disabled { opacity: 0.3; cursor: not-allowed; transform: none; }
 
-        .btn-red { background: rgba(220, 38, 38, 0.2); border: 1px solid var(--red-600); color: var(--red-600); }
-        .btn-red:hover:not(:disabled) { background: var(--red-600); color: #fff; }
+        .btn-ghost {
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.12);
+            color: #ccc;
+        }
+        .btn-ghost:hover:not(:disabled) { background: rgba(255,255,255,0.1); }
+
+        .btn-red {
+            background: rgba(220,38,38,0.12);
+            border: 1px solid var(--red); color: var(--red);
+        }
+        .btn-red:hover:not(:disabled) { background: var(--red); color: #fff; }
 
         .input-field {
             flex: 1;
             background: #18181b;
             border: 1px solid #27272a;
             border-radius: 0.75rem;
-            padding: 1rem;
-            color: #fff;
-            font-size: 0.875rem;
-            outline: none;
+            padding: 0.875rem 1rem;
+            color: #fff; font-size: 0.875rem; outline: none;
+            transition: border-color 0.2s;
         }
-        .input-field:focus { border-color: var(--amber-500); }
+        .input-field:focus { border-color: var(--amber); }
 
         .evidence-item {
-            font-size: 0.75rem;
-            background: rgba(255,255,255,0.05);
-            padding: 0.5rem;
-            border-radius: 0.25rem;
-            border: 1px solid rgba(255,255,255,0.05);
+            font-size: 0.72rem;
+            background: rgba(245,158,11,0.06);
+            padding: 0.45rem 0.65rem;
+            border-radius: 0.35rem;
+            border: 1px solid rgba(245,158,11,0.15);
+            color: #d4d4d8;
+            line-height: 1.5;
         }
+        .evidence-item::before { content: '🔍 '; }
 
         .noir-card {
-            background: rgba(20, 20, 20, 0.6);
-            border: 1px solid #333;
+            background: rgba(18,18,20,0.7);
+            border: 1px solid #2a2a2e;
             padding: 1.5rem;
-            border-radius: 1.5rem;
+            border-radius: 1.25rem;
         }
 
-        /* --- ANIMATIONS --- */
-        @keyframes fade-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-        .animate-fade-in { animation: fade-in 0.3s ease-out forwards; }
-        
-        .scanline { 
-            position: absolute; 
-            width: 100%; 
-            height: 100%; 
-            background: linear-gradient(to bottom, transparent 50%, rgba(0,0,0,0.05) 50%); 
-            background-size: 100% 4px; 
-            pointer-events: none; 
+        .typing-dot {
+            animation: typing 1.4s infinite ease-in-out both;
+            width: 5px; height: 5px;
+            background: var(--zinc-500);
+            border-radius: 50%;
+            display: inline-block;
+            margin: 0 2px;
         }
+        .typing-dot:nth-child(2) { animation-delay: 0.2s; }
+        .typing-dot:nth-child(3) { animation-delay: 0.4s; }
 
-        .typing-dot { animation: typing 1.4s infinite ease-in-out both; width: 4px; height: 4px; background: #71717a; border-radius: 50%; margin: 0 2px; display: inline-block; }
-        @keyframes typing { 0%, 80%, 100% { transform: scale(0); } 40% { transform: scale(1); } }
+        /* ============================================================
+           LAYOUT HELPERS
+        ============================================================ */
+        .flex        { display: flex; }
+        .flex-col    { flex-direction: column; }
+        .items-center { align-items: center; }
+        .items-end   { align-items: flex-end; }
+        .justify-between { justify-content: space-between; }
+        .justify-center  { justify-content: center; }
+        .flex-1      { flex: 1; }
+        .gap-2 { gap: 0.5rem; }
+        .gap-4 { gap: 1rem; }
+        .gap-6 { gap: 1.5rem; }
+        .gap-8 { gap: 2rem; }
+        .grid  { display: grid; }
+        .grid-cols-2 { grid-template-columns: repeat(2, 1fr); }
+        .grid-cols-3 { grid-template-columns: repeat(3, 1fr); }
+        .overflow-y-auto { overflow-y: auto; }
+        .text-center { text-align: center; }
+        .w-full  { width: 100%; }
+        .h-full  { height: 100%; }
+        .relative { position: relative; }
+        .absolute { position: absolute; }
+        .inset-0  { top:0; right:0; bottom:0; left:0; }
 
-        /* --- SCROLLBAR --- */
-        .custom-scrollbar { overflow-y: auto; }
+        /* ============================================================
+           TYPOGRAPHY
+        ============================================================ */
+        .uppercase     { text-transform: uppercase; }
+        .italic        { font-style: italic; }
+        .font-bold     { font-weight: 700; }
+        .tracking-widest { letter-spacing: 0.12em; }
+        .text-xs  { font-size: 0.75rem; }
+        .text-sm  { font-size: 0.875rem; }
+        .text-xl  { font-size: 1.25rem; }
+        .text-3xl { font-size: 1.875rem; }
+        .text-6xl { font-size: 3.75rem; }
+        .text-amber   { color: var(--amber); }
+        .text-zinc-500 { color: var(--zinc-500); }
+        .text-zinc-300 { color: #d4d4d8; }
+
+        /* ============================================================
+           SCROLLBAR
+        ============================================================ */
         .custom-scrollbar::-webkit-scrollbar { width: 4px; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: #444; border-radius: 10px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #3f3f46; border-radius: 10px; }
     </style>
 </head>
 <body>
-    <div id="root"></div>
+<div id="root"></div>
 
-    <script type="text/babel">
-        const { useState, useEffect, useRef, Fragment } = React;
+<script type="text/babel">
+const { useState, useEffect, useRef, useCallback } = React;
 
-        const OLLAMA_URL = "http://localhost:11434/api/chat";
-        const MODEL = "mistral:7b";
+/* ================================================================
+   CONFIG
+================================================================ */
+const OLLAMA_URL = "http://localhost:11434/api/chat";
+const MODEL      = "mistral:7b";
 
-        const formatVal = (val) => {
-            if (!val) return "";
-            if (typeof val === 'string') return val;
-            if (typeof val === 'object') {
-                return val.name || val.title || val.item || val.description || val.text || JSON.stringify(val);
+/* ================================================================
+   HELPERS
+================================================================ */
+const fmt = (val) => {
+    if (!val) return "";
+    if (typeof val === 'string') return val;
+    if (typeof val === 'object')
+        return val.name || val.title || val.item || val.description || val.text || JSON.stringify(val);
+    return String(val);
+};
+
+const cleanJSON = (str) => {
+    try {
+        const m = str.match(/\{[\s\S]*\}/);
+        return m ? m[0] : str;
+    } catch { return str; }
+};
+
+/* ================================================================
+   TEXTURE FACTORIES (canvas-based, no external assets needed)
+================================================================ */
+function makeWoodTexture(tileSize = 128) {
+    const c = document.createElement('canvas');
+    c.width = c.height = tileSize;
+    const ctx = c.getContext('2d');
+    ctx.fillStyle = '#1a1208';
+    ctx.fillRect(0, 0, tileSize, tileSize);
+    // plank lines
+    for (let y = 0; y < tileSize; y += 16) {
+        ctx.fillStyle = `rgba(0,0,0,${0.15 + Math.random() * 0.1})`;
+        ctx.fillRect(0, y, tileSize, 1);
+    }
+    // grain
+    for (let i = 0; i < 80; i++) {
+        ctx.strokeStyle = `rgba(${80 + Math.random()*40},${50 + Math.random()*20},${10 + Math.random()*10},${0.1 + Math.random()*0.1})`;
+        ctx.lineWidth = 0.5;
+        ctx.beginPath();
+        const x0 = Math.random() * tileSize;
+        ctx.moveTo(x0, 0); ctx.lineTo(x0 + (Math.random()-0.5)*20, tileSize);
+        ctx.stroke();
+    }
+    const t = new THREE.CanvasTexture(c);
+    t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    t.repeat.set(4, 4);
+    return t;
+}
+
+function makeStoneTexture(tileSize = 128) {
+    const c = document.createElement('canvas');
+    c.width = c.height = tileSize;
+    const ctx = c.getContext('2d');
+    ctx.fillStyle = '#161618';
+    ctx.fillRect(0, 0, tileSize, tileSize);
+    for (let i = 0; i < 200; i++) {
+        const x = Math.random() * tileSize, y = Math.random() * tileSize;
+        const r = 1 + Math.random() * 3;
+        ctx.fillStyle = `rgba(${60 + Math.random()*30},${60 + Math.random()*30},${60 + Math.random()*30},0.3)`;
+        ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+    }
+    const t = new THREE.CanvasTexture(c);
+    t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    t.repeat.set(6, 6);
+    return t;
+}
+
+/* ================================================================
+   3D SCENE BUILDER
+================================================================ */
+function buildScene(THREE, crimeScene, canvasEl, stateRef, setInteractionText, setRoomName, minimapRef) {
+    const scene    = new THREE.Scene();
+    scene.background = new THREE.Color(0x050407);
+    scene.fog = new THREE.FogExp2(0x050407, 0.045);
+
+    const camera = new THREE.PerspectiveCamera(72, window.innerWidth / window.innerHeight, 0.1, 120);
+    camera.position.set(0, 1.75, 20);
+    stateRef.current.camera = camera;
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    canvasEl.appendChild(renderer.domElement);
+
+    /* -- Textures -- */
+    const woodTex  = makeWoodTexture();
+    const stoneTex = makeStoneTexture();
+
+    /* -- Materials -- */
+    const matWall   = new THREE.MeshStandardMaterial({ color: 0x1a1a1c, roughness: 0.9 });
+    const matFloor  = new THREE.MeshStandardMaterial({ map: woodTex,  roughness: 0.85 });
+    const matCeil   = new THREE.MeshStandardMaterial({ map: stoneTex, roughness: 0.95, color: 0x0d0d0f });
+    const matDoorDefault = new THREE.MeshStandardMaterial({ color: 0x2c1a0e, roughness: 0.8 });
+    const matDoorBlue    = new THREE.MeshStandardMaterial({ color: 0x0c1225, roughness: 0.7 });
+
+    /* ── Primitive helpers ── */
+    const box = (w, h, d, x, y, z, mat) => {
+        const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+        m.position.set(x, y, z);
+        m.castShadow = true; m.receiveShadow = true;
+        scene.add(m); return m;
+    };
+
+    const plane = (w, d, x, y, z, rotX, mat) => {
+        const m = new THREE.Mesh(new THREE.PlaneGeometry(w, d), mat);
+        m.rotation.x = rotX; m.position.set(x, y, z);
+        m.receiveShadow = true;
+        scene.add(m); return m;
+    };
+
+    /* ── Lighting ── */
+    scene.add(new THREE.AmbientLight(0x2a1f10, 0.6));
+    scene.add(new THREE.HemisphereLight(0x4a3010, 0x080408, 0.4));
+
+    const ptLight = (x, y, z, color, intensity, dist) => {
+        const l = new THREE.PointLight(color, intensity, dist);
+        l.position.set(x, y, z);
+        l.castShadow = true;
+        l.shadow.mapSize.set(512, 512);
+        scene.add(l); return l;
+    };
+
+    // Lobby chandelier
+    ptLight(0, 4.5, 10,  0xffd580, 3.5, 22);
+    // Interrogation wing
+    ptLight(-13, 4, 0,   0xff4444, 2.2, 28);
+    ptLight(-13, 4, -14, 0xdd3333, 1.8, 18);
+    ptLight(-13, 4,  14, 0xdd3333, 1.8, 18);
+    // Office wing
+    ptLight(13, 4, -8,   0x4466ff, 2.0, 20);
+    ptLight(13, 4,  8,   0x4466ff, 1.5, 16);
+
+    /* ================================================================
+       MANOR LAYOUT
+       Origin: entrance archway.  +Z = towards entrance, -Z = deeper.
+       Left wing  (X < 0): interrogation cells
+       Right wing (X > 0): forensic office + commissioner
+       Centre:              entrance hall + corridor
+    ================================================================ */
+    const H = 5;   // ceiling height
+    const CEIL_Y = H;
+
+    /*  ── ENTRANCE HALL (10 × 14 at z=10..24) ──  */
+    plane(10, 14, 0, 0,    10, -Math.PI/2, matFloor);  // floor
+    plane(10, 14, 0, CEIL_Y, 10, Math.PI/2, matCeil);  // ceiling
+    box(10, H, 0.3,  0, H/2, 24,  matWall);             // back wall
+    box(0.3, H, 14, -5, H/2, 10,  matWall);             // left wall
+    box(0.3, H, 14,  5, H/2, 10,  matWall);             // right wall
+
+    /* Chandelier fixture */
+    const chanBase = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.05, 0.05, 0.8, 8),
+        new THREE.MeshStandardMaterial({ color: 0x6b4c1e })
+    );
+    chanBase.position.set(0, CEIL_Y - 0.4, 10);
+    scene.add(chanBase);
+    const chanRing = new THREE.Mesh(
+        new THREE.TorusGeometry(0.5, 0.04, 8, 24),
+        new THREE.MeshStandardMaterial({ color: 0xc8a44a, metalness: 0.8, roughness: 0.3 })
+    );
+    chanRing.position.set(0, CEIL_Y - 0.8, 10);
+    chanRing.rotation.x = Math.PI / 2;
+    scene.add(chanRing);
+
+    /* Entry desk */
+    box(2, 0.1, 1,  0, 0.8, 18, new THREE.MeshStandardMaterial({ color: 0x2a1a0a, roughness: 0.7 }));
+    box(2, 0.8, 0.1, 0, 0.4, 18.55, new THREE.MeshStandardMaterial({ color: 0x2a1a0a, roughness: 0.7 }));
+
+    /*  ── MAIN CORRIDOR (4 × 30 at x=-2..2, z=-15..15) ──  */
+    plane(4, 30,   0, 0,    0, -Math.PI/2, matFloor);
+    plane(4, 30,   0, CEIL_Y, 0,  Math.PI/2, matCeil);
+    box(0.3, H, 30, -2, H/2, 0, matWall);
+    box(0.3, H, 30,  2, H/2, 0, matWall);
+    // Far wall
+    box(4, H, 0.3,  0, H/2, -15, matWall);
+
+    /*  ── LEFT WING — Interrogation (18 × 30, x=-2..-20) ──  */
+    const LW_X = -11; // center
+    plane(18, 30, LW_X, 0,    0, -Math.PI/2, matFloor);
+    plane(18, 30, LW_X, CEIL_Y, 0,  Math.PI/2, matCeil);
+    box(0.3, H, 30, -20, H/2, 0, matWall);  // outer wall
+    box(18, H, 0.3, LW_X, H/2, -15, matWall); // back
+    box(18, H, 0.3, LW_X, H/2,  15, matWall); // front
+
+    /* Cell dividers (5 cells, 6 apart) */
+    for (let i = 0; i < 4; i++) {
+        const z = -12 + i * 6;
+        // partial wall leaving door gap
+        box(8, H, 0.2, LW_X - 1, H/2, z, matWall);
+    }
+
+    /* Bookshelves along outer left wall */
+    for (let i = 0; i < 4; i++) {
+        const z = -10 + i * 7;
+        box(0.3, 3.5, 2, -19.6, 1.75, z, new THREE.MeshStandardMaterial({ color: 0x1e1008, roughness: 0.9 }));
+        // shelf panels
+        for (let s = 0; s < 4; s++) {
+            box(0.25, 0.06, 2, -19.45, 0.5 + s * 0.8, z, new THREE.MeshStandardMaterial({ color: 0x140c04 }));
+        }
+        // mock books
+        for (let b = 0; b < 6; b++) {
+            const bColor = [0x882222, 0x224488, 0x225522, 0x887722, 0x442244, 0x334433][b];
+            box(0.08, 0.6 + Math.random()*0.2, 0.25, -19.3, 0.5 + Math.floor(b/3)*0.8 + 0.3, z - 0.7 + b*0.28,
+                new THREE.MeshStandardMaterial({ color: bColor }));
+        }
+    }
+
+    /*  ── RIGHT WING — Offices (18 × 20, x=2..20) ──  */
+    const RW_X = 11;
+    plane(18, 20, RW_X, 0,    -2.5, -Math.PI/2, matFloor);
+    plane(18, 20, RW_X, CEIL_Y, -2.5,  Math.PI/2, matCeil);
+    box(0.3, H, 20, 20, H/2, -2.5, matWall);  // outer wall
+    box(18, H, 0.3, RW_X, H/2, -12.5, matWall); // back
+    box(18, H, 0.3, RW_X, H/2,  7.5, matWall);  // front
+    // divider between office rooms
+    box(7, H, 0.2, RW_X - 2, H/2, 0, matWall);
+
+    /* Forensic desk */
+    box(3, 0.1, 1.5, 14, 0.8, -8, new THREE.MeshStandardMaterial({ color: 0x0a1020, roughness: 0.5 }));
+    // terminal monitor
+    box(1.2, 0.8, 0.1, 14, 1.3, -8.8, new THREE.MeshStandardMaterial({ color: 0x001a33, emissive: 0x003366, emissiveIntensity: 0.8 }));
+
+    /* Commissioner desk */
+    box(3, 0.1, 1.5, 13, 0.8, 6, new THREE.MeshStandardMaterial({ color: 0x180e04, roughness: 0.6 }));
+    box(3, 0.7, 0.1, 13, 0.45, 6.8, new THREE.MeshStandardMaterial({ color: 0x180e04 }));
+    // Framed portrait on wall
+    box(0.08, 1.2, 0.9, 19.5, 3, 6, new THREE.MeshStandardMaterial({ color: 0x6b4c1e }));
+    box(0.05, 1.0, 0.7, 19.4, 3, 6, new THREE.MeshStandardMaterial({ color: 0x2a1a0a }));
+
+    /* ================================================================
+       INTERACTABLE SYSTEM
+    ================================================================ */
+    const interactables = [];
+
+    const addInteractable = (mesh, name, type, data = null) => {
+        mesh.userData = { name, type, data };
+        interactables.push(mesh);
+        stateRef.current.interactables = interactables;
+        return mesh;
+    };
+
+    /* ── Door factory ── */
+    const makeDoor = (name, x, z, rotY, mat = matDoorDefault) => {
+        const pivot = new THREE.Group();
+        pivot.position.set(x, H/2 - 0.1, z);
+        pivot.rotation.y = rotY;
+        scene.add(pivot);
+        const leaf = new THREE.Mesh(
+            new THREE.BoxGeometry(2.2, 3.8, 0.12),
+            mat
+        );
+        leaf.position.set(1.1, 0, 0);
+        pivot.add(leaf);
+        // door frame
+        const frameMat = new THREE.MeshStandardMaterial({ color: 0x3a2510, roughness: 0.8 });
+        const frameL = new THREE.Mesh(new THREE.BoxGeometry(0.15, 4.2, 0.2), frameMat);
+        frameL.position.set(0, 0.2, 0); pivot.add(frameL);
+        const frameT = new THREE.Mesh(new THREE.BoxGeometry(2.5, 0.15, 0.2), frameMat);
+        frameT.position.set(1.1, 2.1, 0); pivot.add(frameT);
+
+        const data = { open: false };
+        leaf.userData = { name, type: 'door', data, pivot, startRot: rotY };
+        interactables.push(leaf);
+        return leaf;
+    };
+
+    /* ── Humanoid character factory ── */
+    const makeHumanoid = (x, z, bodyColor, headColor = 0xd4a97a) => {
+        const g = new THREE.Group();
+        // legs
+        const legMat = new THREE.MeshStandardMaterial({ color: bodyColor, roughness: 0.9 });
+        [-0.18, 0.18].forEach(ox => {
+            const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.09, 0.9, 8), legMat);
+            leg.position.set(ox, 0.45, 0); g.add(leg);
+        });
+        // torso
+        const torso = new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.7, 0.22), legMat);
+        torso.position.set(0, 1.1, 0); g.add(torso);
+        // arms
+        [-0.32, 0.32].forEach(ox => {
+            const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.065, 0.65, 8), legMat);
+            arm.position.set(ox, 1.0, 0);
+            arm.rotation.z = ox < 0 ? 0.25 : -0.25;
+            g.add(arm);
+        });
+        // neck
+        const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.15, 8),
+            new THREE.MeshStandardMaterial({ color: headColor }));
+        neck.position.set(0, 1.53, 0); g.add(neck);
+        // head
+        const head = new THREE.Mesh(new THREE.SphereGeometry(0.22, 12, 10),
+            new THREE.MeshStandardMaterial({ color: headColor, roughness: 0.8 }));
+        head.position.set(0, 1.78, 0); g.add(head);
+        // eyes
+        [[-0.07, 1.82, 0.2], [0.07, 1.82, 0.2]].forEach(([ex, ey, ez]) => {
+            const eye = new THREE.Mesh(new THREE.SphereGeometry(0.035, 6, 6),
+                new THREE.MeshStandardMaterial({ color: 0x111111 }));
+            eye.position.set(ex, ey, ez); g.add(eye);
+        });
+        g.position.set(x, 0, z);
+        scene.add(g);
+        return g;
+    };
+
+    /* ── Briefing NPC (lobby) ── */
+    makeHumanoid(0, 18, 0x2d5a1b, 0xc8a46a); // green coat detective aide
+    // invisible trigger volume
+    const briefTrigger = new THREE.Mesh(
+        new THREE.BoxGeometry(2.5, 3.5, 2.5),
+        new THREE.MeshBasicMaterial({ visible: false })
+    );
+    briefTrigger.position.set(0, 1.75, 18);
+    scene.add(briefTrigger);
+    addInteractable(briefTrigger, "Case Briefing", "briefing");
+
+    /* ── Suspect NPCs (cells) ── */
+    const suspectColors = [0x3a2a5a, 0x5a2a2a, 0x2a3a5a, 0x3a5a2a, 0x5a4a2a];
+    crimeScene.suspects.forEach((s, i) => {
+        const z = -12 + i * 6;
+        makeDoor(`Cell ${i + 1}`, -3.5, z, Math.PI / 2);
+        makeHumanoid(-13, z, suspectColors[i % suspectColors.length]);
+        const trigger = new THREE.Mesh(
+            new THREE.BoxGeometry(2.5, 3.5, 2.5),
+            new THREE.MeshBasicMaterial({ visible: false })
+        );
+        trigger.position.set(-13, 1.75, z);
+        scene.add(trigger);
+        addInteractable(trigger, `Interrogate: ${fmt(s.name)}`, "chat", s);
+    });
+
+    /* ── Forensic terminal ── */
+    const terminalTrigger = new THREE.Mesh(
+        new THREE.BoxGeometry(2, 2.5, 2),
+        new THREE.MeshBasicMaterial({ visible: false })
+    );
+    terminalTrigger.position.set(14, 1.25, -8);
+    scene.add(terminalTrigger);
+    addInteractable(terminalTrigger, "Forensic Terminal", "actions");
+
+    // right-wing door from corridor
+    makeDoor("Door: Forensic Wing", 2.3, -4, 0, matDoorBlue);
+
+    /* ── Commissioner ── */
+    makeHumanoid(13, 5, 0x1a1a3a, 0xd0b080); // dark navy + gold skin
+    const bossTrigger = new THREE.Mesh(
+        new THREE.BoxGeometry(2.5, 3.5, 2.5),
+        new THREE.MeshBasicMaterial({ visible: false })
+    );
+    bossTrigger.position.set(13, 1.75, 5);
+    scene.add(bossTrigger);
+    addInteractable(bossTrigger, "Commissioner's Office", "boss");
+    makeDoor("Door: Commissioner", 2.3, 4, 0, matDoorBlue);
+
+    /* ================================================================
+       INPUT & MOVEMENT
+    ================================================================ */
+    const keys = stateRef.current;
+
+    const onMouseMove = (e) => {
+        if (document.pointerLockElement === renderer.domElement) {
+            keys.yaw   -= e.movementX * 0.0018;
+            keys.pitch -= e.movementY * 0.0018;
+            keys.pitch  = Math.max(-Math.PI / 2.1, Math.min(Math.PI / 2.1, keys.pitch));
+        }
+    };
+
+    const onKey = (e, v) => {
+        if (e.code === 'KeyW' || e.code === 'ArrowUp')    keys.moveForward  = v;
+        if (e.code === 'KeyS' || e.code === 'ArrowDown')  keys.moveBackward = v;
+        if (e.code === 'KeyA' || e.code === 'ArrowLeft')  keys.moveLeft     = v;
+        if (e.code === 'KeyD' || e.code === 'ArrowRight') keys.moveRight    = v;
+    };
+
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('keydown', (e) => onKey(e, true));
+    window.addEventListener('keyup',   (e) => onKey(e, false));
+
+    /* ================================================================
+       RAYCASTER & ANIMATION LOOP
+    ================================================================ */
+    const raycaster = new THREE.Raycaster();
+    const vel       = new THREE.Vector3();
+    const dir       = new THREE.Vector3();
+    const center2d  = new THREE.Vector2(0, 0);
+
+    const ROOMS = [
+        { name: "Entrance Hall",         xMin: -5,  xMax:  5,  zMin:  3,  zMax: 24 },
+        { name: "Main Corridor",          xMin: -2,  xMax:  2,  zMin: -15, zMax:  3 },
+        { name: "Interrogation Wing",     xMin: -20, xMax: -2,  zMin: -15, zMax: 15 },
+        { name: "Forensic Laboratory",    xMin:  2,  xMax: 20,  zMin: -12.5,zMax: 0 },
+        { name: "Commissioner's Office",  xMin:  2,  xMax: 20,  zMin:  0,  zMax:  7.5 },
+    ];
+
+    const getRoomName = (pos) => {
+        for (const r of ROOMS)
+            if (pos.x >= r.xMin && pos.x <= r.xMax && pos.z >= r.zMin && pos.z <= r.zMax)
+                return r.name;
+        return "Manor of Whispers";
+    };
+
+    let lastRoom = "";
+    let frameCount = 0;
+
+    const animate = () => {
+        requestAnimationFrame(animate);
+        const ui = stateRef.current.activeUI;
+
+        if (document.pointerLockElement === renderer.domElement && !ui) {
+            camera.rotation.set(keys.pitch, keys.yaw, 0, 'YXZ');
+
+            vel.x -= vel.x * 10 * 0.016;
+            vel.z -= vel.z * 10 * 0.016;
+            dir.z = Number(keys.moveForward)  - Number(keys.moveBackward);
+            dir.x = Number(keys.moveRight)    - Number(keys.moveLeft);
+            dir.normalize();
+            const speed = 60;
+            if (keys.moveForward  || keys.moveBackward) vel.z -= dir.z * speed * 0.016;
+            if (keys.moveLeft     || keys.moveRight)    vel.x -= dir.x * speed * 0.016;
+
+            camera.translateX(-vel.x * 0.016);
+            camera.translateZ( vel.z * 0.016);
+            camera.position.y  = 1.75;
+            camera.position.x  = Math.max(-19.5, Math.min(19.5, camera.position.x));
+            camera.position.z  = Math.max(-14.5, Math.min(23.5, camera.position.z));
+
+            // interaction raycast
+            raycaster.setFromCamera(center2d, camera);
+            const hits = raycaster.intersectObjects(interactables);
+            if (hits.length > 0 && hits[0].distance < 5)
+                setInteractionText(`[E / Click]  ${hits[0].object.userData.name}`);
+            else
+                setInteractionText("");
+
+            // room label (update every 30 frames)
+            frameCount++;
+            if (frameCount % 30 === 0) {
+                const rn = getRoomName(camera.position);
+                if (rn !== lastRoom) { lastRoom = rn; setRoomName(rn); }
             }
-            return String(val);
-        };
-
-        const cleanJSON = (str) => {
-            try {
-                const match = str.match(/\{[\s\S]*\}/);
-                return match ? match[0] : str;
-            } catch (e) { return str; }
-        };
-
-        function App() {
-            const [status, setStatus] = useState('initializing');
-            const [crimeScene, setCrimeScene] = useState(null);
-            const [activeUI, setActiveUI] = useState(null); 
-            const [activeSuspect, setActiveSuspect] = useState(null);
-            const [conversations, setConversations] = useState({});
-            const [evidence, setEvidence] = useState([]);
-            const [completedActions, setCompletedActions] = useState(new Set());
-            const [isThinking, setIsThinking] = useState(false);
-            const [interactionText, setInteractionText] = useState("");
-            const [hasConfessed, setHasConfessed] = useState({});
-            
-            const canvasRef = useRef();
-            const mountRef = useRef(false);
-            const uiRef = useRef(null); 
-
-            const stateRef = useRef({ 
-                moveForward: false, moveBackward: false, moveLeft: false, moveRight: false,
-                pitch: 0, yaw: 0, camera: null, interactables: [], doors: [] 
-            });
-
-            useEffect(() => { uiRef.current = activeUI; }, [activeUI]);
-
-            const initMystery = async () => {
-                setStatus('generating');
-                try {
-                    const prompt = `Generate a murder mystery JSON. Include: victim, victimProfile, location, weapon, motive, fullStory, 
-                    timeline (array of strings with times), discoveryPhase (string), evidenceList (array), 
-                    investigativeActions (array of 4: id, task, result), suspects (array of 5: id, name, role, secret, isKiller, clueTrigger). JSON ONLY.`;
-                    const res = await fetch(OLLAMA_URL, {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ model: MODEL, format: "json", stream: false, messages: [{ role: "user", content: prompt }] })
-                    });
-                    const data = await res.json();
-                    const scene = JSON.parse(cleanJSON(data.message.content));
-                    setCrimeScene(scene);
-                    const h = {}; scene.suspects.forEach(s => h[s.id] = []);
-                    setConversations(h);
-                    setStatus('playing');
-                } catch (e) {
-                    alert("Ollama Error. Check OLLAMA_ORIGINS setting.");
-                    setStatus('initializing');
-                }
-            };
-
-            useEffect(() => {
-                if (status !== 'playing' || mountRef.current) return;
-                mountRef.current = true;
-
-                const scene = new THREE.Scene();
-                scene.background = new THREE.Color(0x050505);
-                scene.fog = new THREE.Fog(0x050505, 1, 40);
-
-                const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-                stateRef.current.camera = camera;
-                camera.position.set(0, 1.7, 18); 
-
-                const renderer = new THREE.WebGLRenderer({ antialias: true });
-                renderer.setSize(window.innerWidth, window.innerHeight);
-                renderer.setPixelRatio(window.devicePixelRatio);
-                canvasRef.current.appendChild(renderer.domElement);
-
-                scene.add(new THREE.AmbientLight(0x666666));
-                scene.add(new THREE.HemisphereLight(0xffffff, 0x444444, 0.8));
-
-                const addPointLight = (x, y, z, color, intensity, dist) => {
-                    const light = new THREE.PointLight(color, intensity, dist);
-                    light.position.set(x, y, z);
-                    scene.add(light);
-                    return light;
-                };
-
-                addPointLight(0, 4, 15, 0xffff00, 2, 15); // Lobby
-                addPointLight(-12, 4, 0, 0xff3333, 2.5, 25); // Interviews
-                addPointLight(12, 4, 0, 0x3333ff, 2.5, 25);  // Admin
-
-                const createBox = (w, h, d, x, y, z, color = 0x222222) => {
-                    const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), new THREE.MeshStandardMaterial({ color, roughness: 0.4 }));
-                    mesh.position.set(x, y, z);
-                    scene.add(mesh);
-                    return mesh;
-                };
-
-                const createStickFigure = (x, z, color = 0xdddddd) => {
-                    const group = new THREE.Group();
-                    const head = new THREE.Mesh(new THREE.SphereGeometry(0.25, 8, 8), new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 0.2 }));
-                    head.position.y = 1.7; group.add(head);
-                    const body = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 1.0), new THREE.MeshStandardMaterial({ color }));
-                    body.position.y = 1.0; group.add(body);
-                    group.position.set(x, 0, z);
-                    scene.add(group);
-                    return group;
-                };
-
-                //createBox(60, 0.1, 60, 0, 0, 0, 0x111111);
-                //createBox(60, 0.1, 60, 0, 5, 0, 0x0a0a0a);
-                createBox(10, 0.2, 10, 0, 0.05, 15, 0x333300); // Yellow floor
-                createBox(10, 5, 0.5, 0, 2.5, 20, 0x222222); 
-                createBox(0.5, 5, 10, -5, 2.5, 15, 0x222222); 
-                createBox(0.5, 5, 10, 5, 2.5, 15, 0x222222); 
-                createBox(4, 5, 30, 0, 2.5, 0, 0x050505);
-                createBox(10, 0.2, 30, -10, 0.05, 0, 0x330000); // Red floor
-                createBox(0.5, 5, 30, -15, 2.5, 0, 0x222222); 
-                for(let i=0; i<5; i++) {
-                    const zPos = -10 + (i * 5);
-                    createBox(5, 5, 0.5, -12.5, 2.5, zPos, 0x222222); 
-                }
-                createBox(10, 0.2, 30, 10, 0.05, 0, 0x000033); // Blue floor
-                createBox(0.5, 5, 30, 15, 2.5, 0, 0x222222); 
-                createBox(10, 5, 0.5, 10, 2.5, -5, 0x222222); 
-                createBox(10, 5, 0.5, 10, 2.5, 5, 0x222222);  
-
-                const interactables = [];
-                const addInteractable = (mesh, name, type, data = null) => {
-                    mesh.userData = { name, type, data };
-                    interactables.push(mesh);
-                    return mesh;
-                };
-
-                const createProperDoor = (name, x, z, rotationY, color = 0x333333) => {
-                    const hinge = new THREE.Group();
-                    hinge.position.set(x, 1.6, z);
-                    hinge.rotation.y = rotationY;
-                    scene.add(hinge);
-                    const doorMesh = new THREE.Mesh(new THREE.BoxGeometry(1.8, 3.2, 0.15), new THREE.MeshStandardMaterial({ color, roughness: 0.8 }));
-                    doorMesh.position.set(0.9, 0, 0); hinge.add(doorMesh);
-                    const doorData = { open: false };
-                    doorMesh.userData = { name, type: "door", data: doorData, pivot: hinge, startRot: rotationY };
-                    interactables.push(doorMesh);
-                    return doorMesh;
-                };
-
-                createStickFigure(0, 18, 0x4ade80);
-                const briefT = new THREE.Mesh(new THREE.BoxGeometry(2,3,2), new THREE.MeshBasicMaterial({visible:false}));
-                briefT.position.set(0, 1.5, 18); scene.add(briefT);
-                addInteractable(briefT, "Case Briefing", "briefing");
-
-                crimeScene.suspects.forEach((s, i) => {
-                    const zPos = -12.5 + (i * 6);
-                    createProperDoor(`Cell ${i+1}`, -5, zPos, Math.PI/2, 0x882222);
-                    createStickFigure(-12, zPos, 0xffffff);
-                    const chatT = new THREE.Mesh(new THREE.BoxGeometry(2, 3, 2), new THREE.MeshBasicMaterial({ visible: false }));
-                    chatT.position.set(-12, 1.5, zPos); scene.add(chatT);
-                    addInteractable(chatT, `Suspect: ${formatVal(s.name)}`, "chat", s);
-                });
-
-                createProperDoor("Door: Control Room", 5, -8, Math.PI/2, 0x222288);
-                const terminal = createBox(1, 1, 1, 13, 0.5, -12, 0x00ffff);
-                addInteractable(terminal, "Forensic Terminal", "actions");
-
-                createProperDoor("Door: Commissioner", 5, 8, Math.PI/2, 0x222288);
-                createStickFigure(12, 12, 0xf87171);
-                const bossT = new THREE.Mesh(new THREE.BoxGeometry(2, 3, 2), new THREE.MeshBasicMaterial({ visible: false }));
-                bossT.position.set(12, 1.5, 12); scene.add(bossT);
-                addInteractable(bossT, "Commissioner", "boss");
-
-                const onMouseMove = (e) => {
-                    if (document.pointerLockElement === renderer.domElement) {
-                        stateRef.current.yaw -= e.movementX * 0.002;
-                        stateRef.current.pitch -= e.movementY * 0.002;
-                        stateRef.current.pitch = Math.max(-Math.PI/2.2, Math.min(Math.PI/2.2, stateRef.current.pitch));
-                    }
-                };
-                const onKey = (e, val) => {
-                    if (e.code === 'KeyW') stateRef.current.moveForward = val;
-                    if (e.code === 'KeyS') stateRef.current.moveBackward = val;
-                    if (e.code === 'KeyA') stateRef.current.moveLeft = val;
-                    if (e.code === 'KeyD') stateRef.current.moveRight = val;
-                };
-
-                window.addEventListener('mousemove', onMouseMove);
-                window.addEventListener('keydown', (e) => onKey(e, true));
-                window.addEventListener('keyup', (e) => onKey(e, false));
-
-                const raycaster = new THREE.Raycaster();
-                const vel = new THREE.Vector3();
-                const dir = new THREE.Vector3();
-                
-                const animate = () => {
-                    requestAnimationFrame(animate);
-                    if (document.pointerLockElement === renderer.domElement && !uiRef.current) {
-                        camera.rotation.set(stateRef.current.pitch, stateRef.current.yaw, 0, 'YXZ');
-                        vel.x -= vel.x * 10 * 0.016;
-                        vel.z -= vel.z * 10 * 0.016;
-                        dir.z = Number(stateRef.current.moveForward) - Number(stateRef.current.moveBackward);
-                        dir.x = Number(stateRef.current.moveRight) - Number(stateRef.current.moveLeft);
-                        dir.normalize();
-                        if (stateRef.current.moveForward || stateRef.current.moveBackward) vel.z -= dir.z * 60 * 0.016;
-                        if (stateRef.current.moveLeft || stateRef.current.moveRight) vel.x -= dir.x * 60 * 0.016;
-                        camera.translateX(-vel.x * 0.016);
-                        camera.translateZ(vel.z * 0.016); 
-                        camera.position.y = 1.7;
-                        camera.position.x = Math.max(-14, Math.min(14, camera.position.x));
-                        camera.position.z = Math.max(-23, Math.min(23, camera.position.z));
-                        raycaster.setFromCamera(new THREE.Vector2(0,0), camera);
-                        const hits = raycaster.intersectObjects(interactables);
-                        if (hits.length > 0 && hits[0].distance < 4.5) setInteractionText(`[CLICK] ${hits[0].object.userData.name}`);
-                        else setInteractionText("");
-                    }
-                    interactables.filter(i => i.userData.type === 'door').forEach(d => {
-                        const target = d.userData.data.open ? d.userData.startRot + Math.PI/2 : d.userData.startRot;
-                        d.userData.pivot.rotation.y = THREE.MathUtils.lerp(d.userData.pivot.rotation.y, target, 0.1);
-                    });
-                    renderer.render(scene, camera);
-                };
-                animate();
-
-                const onClick = () => {
-                    if (document.pointerLockElement !== renderer.domElement) return;
-                    raycaster.setFromCamera(new THREE.Vector2(0,0), camera);
-                    const hits = raycaster.intersectObjects(interactables);
-                    if (hits.length > 0 && hits[0].distance < 4.5) {
-                        const d = hits[0].object.userData;
-                        if (d.type === 'door') d.data.open = !d.data.open;
-                        else {
-                            if (d.type === 'chat') setActiveSuspect(d.data);
-                            setActiveUI(d.type);
-                            document.exitPointerLock();
-                        }
-                    }
-                };
-                renderer.domElement.addEventListener('click', onClick);
-            }, [status]);
-
-            const chat = async (msg) => {
-                if (!msg.trim() || isThinking) return;
-                const s = activeSuspect;
-                setConversations(p => ({ ...p, [s.id]: [...p[s.id], { role: 'user', content: msg }] }));
-                setIsThinking(true);
-                try {
-                    const res = await fetch(OLLAMA_URL, {
-                        method: "POST", headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({
-                            model: MODEL, stream: false,
-                            messages: [{ role: 'system', content: `You are ${formatVal(s.name)}. Secret: ${formatVal(s.secret)}. If user says "${formatVal(s.clueTrigger)}", reveal it. Max 2 sentences.` }, ...conversations[s.id], { role: 'user', content: msg }]
-                        })
-                    });
-                    const d = await res.json();
-                    const reply = d.message.content;
-                    setConversations(p => ({ ...p, [s.id]: [...p[s.id], { role: 'assistant', content: reply }] }));
-                    if (reply.toLowerCase().includes(formatVal(s.clueTrigger).toLowerCase())) {
-                        setEvidence(prev => [...new Set([...prev, `Lead: ${formatVal(s.name)} revealed secret.`])]);
-                        setHasConfessed(prev => ({ ...prev, [s.id]: true }));
-                    }
-                } finally { setIsThinking(false); }
-            };
-
-            if (status !== 'playing') return <LoadingScreen status={status} onStart={initMystery} />;
-
-            return (
-                <div className="relative w-screen h-screen">
-                    <div ref={canvasRef} className="w-full h-full" onClick={(e) => !activeUI && e.target.requestPointerLock()} />
-                    <div className="hud-overlay">
-                        <div className="crosshair" />
-                        <div className="scanline" />
-                        {interactionText && <div className="interaction-prompt font-typewriter">{interactionText}</div>}
-                        
-                        <div className="absolute top-6 right-6 glass w-72 max-h-[300px] custom-scrollbar">
-                            <p className="text-xs uppercase font-bold text-amber tracking-widest mb-2">Evidence Folder</p>
-                            <div className="flex flex-col gap-2">
-                                {evidence.map((e, i) => <div key={i} className="evidence-item">{formatVal(e)}</div>)}
-                                {evidence.length === 0 && <p className="text-xs text-zinc-500 italic">No evidence recovered.</p>}
-                            </div>
-                        </div>
-
-                        {activeUI && (
-                            <div className="absolute inset-0 flex items-center justify-center bg-black/80 p-6 pointer-events-none z-50">
-                                <div className="ui-panel animate-fade-in pointer-events-auto">
-                                    <button onClick={() => setActiveUI(null)} style={{position:'absolute', top:'1.5rem', right:'1.5rem', background:'none', border:'none', color:'#777', cursor:'pointer', fontSize:'0.75rem', fontWeight:'bold'}} className="uppercase">Close [ESC]</button>
-                                    
-                                    {activeUI === 'briefing' && (
-                                        <div className="flex flex-col gap-8">
-                                            <div className="noir-card" style={{position:'relative', padding:'2rem'}}>
-                                                <span style={{fontSize:'4rem', color:'#f59e0b', fontWeight:'700', position:'absolute', left:'1.5rem', top:'1rem', opacity:'0.8'}}>T</span>
-                                                <p style={{fontSize:'1.25rem', color:'#d4d4d8', fontStyle:'italic', lineHeight:'1.8', paddingLeft:'3.5rem', fontWeight:'300'}}>
-                                                    {formatVal(crimeScene.fullStory)}
-                                                </p>
-                                            </div>
-                                            <div className="grid grid-cols-3 gap-8">
-                                                <div className="flex flex-col gap-2">
-                                                    <p className="text-xs uppercase tracking-widest text-zinc-500 font-bold">Targeted Person</p>
-                                                    <p className="text-3xl font-bold uppercase tracking-tighter">{formatVal(crimeScene.victim)}</p>
-                                                    <p className="text-sm text-zinc-500 italic">{formatVal(crimeScene.victimProfile)}</p>
-                                                </div>
-                                                <div className="flex flex-col gap-4">
-                                                    <div>
-                                                        <p className="text-xs uppercase tracking-widest text-zinc-500 font-bold mb-1">Motive</p>
-                                                        <p className="text-zinc-300 italic">"{formatVal(crimeScene.motive)}"</p>
-                                                    </div>
-                                                    <div>
-                                                        <p className="text-xs uppercase tracking-widest text-zinc-500 font-bold mb-1">Instrument</p>
-                                                        <p className="text-white text-xl font-bold uppercase">{formatVal(crimeScene.weapon)}</p>
-                                                    </div>
-                                                </div>
-                                                <div className="flex flex-col gap-4">
-                                                     <p className="text-xs uppercase tracking-widest text-zinc-500 font-bold">Timeline</p>
-                                                     <div className="flex flex-col gap-2" style={{borderLeft:'1px solid #27272a', paddingLeft:'1rem'}}>
-                                                        {crimeScene.timeline?.map((evt, i) => (
-                                                            <div key={i} className="text-xs text-zinc-500">
-                                                                <span className="text-amber">•</span> {evt}
-                                                            </div>
-                                                        ))}
-                                                     </div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    )}
-
-                                    {activeUI === 'chat' && activeSuspect && (
-                                        <div className="flex flex-col" style={{height:'450px'}}>
-                                            <div className="flex justify-between items-end gap-4 mb-6" style={{borderBottom:'1px solid #27272a', paddingBottom:'1rem'}}>
-                                                <div>
-                                                    <h2 className="text-3xl font-typewriter text-amber uppercase tracking-tighter">{formatVal(activeSuspect.name)}</h2>
-                                                    <p className="text-xs text-zinc-500 uppercase tracking-widest">{formatVal(activeSuspect.role)}</p>
-                                                </div>
-                                            </div>
-                                            <div className="flex-1 overflow-y-auto custom-scrollbar flex flex-col gap-4 mb-6 pr-2">
-                                                {conversations[activeSuspect.id].map((m, i) => (
-                                                    <div key={i} className="flex" style={{justifyContent: m.role === 'user' ? 'flex-end' : 'flex-start'}}>
-                                                        <div style={{maxWidth:'70%', padding:'1rem', borderRadius:'0.75rem', fontSize:'0.875rem', background: m.role === 'user' ? '#f59e0b' : '#18181b', color: m.role === 'user' ? '#fff' : '#d4d4d8', border: m.role === 'user' ? 'none' : '1px solid #27272a', fontStyle: m.role === 'assistant' ? 'italic' : 'normal'}}>
-                                                            {formatVal(m.content)}
-                                                        </div>
-                                                    </div>
-                                                ))}
-                                                {isThinking && <div style={{padding:'0.5rem'}}><div className="typing-dot"/><div className="typing-dot"/><div className="typing-dot"/></div>}
-                                            </div>
-                                            <form onSubmit={(e) => { e.preventDefault(); chat(e.target.m.value); e.target.m.value=''; }} className="flex gap-4">
-                                                <input name="m" className="input-field" placeholder="Interrogate suspect..." autoFocus />
-                                                <button className="btn">Ask</button>
-                                            </form>
-                                        </div>
-                                    )}
-
-                                    {activeUI === 'actions' && (
-                                        <div className="flex flex-col gap-6">
-                                            <h2 className="text-xl font-typewriter uppercase tracking-widest">Forensic Terminal</h2>
-                                            <div className="grid grid-cols-2 gap-4">
-                                                {crimeScene.investigativeActions.map(a => (
-                                                    <button key={a.id} onClick={() => { setCompletedActions(p => new Set([...p, a.id])); setEvidence(e => [...new Set([...e, a.result])]); }} 
-                                                        disabled={completedActions.has(a.id)}
-                                                        style={{padding:'1.5rem', background:'rgba(24,24,27,0.5)', border:'1px solid #27272a', borderRadius:'1rem', textAlign:'left', cursor:'pointer', transition:'border-color 0.2s', opacity: completedActions.has(a.id) ? 0.4 : 1}}>
-                                                        <p className="text-sm font-bold text-zinc-300">{formatVal(a.task)}</p>
-                                                        {completedActions.has(a.id) && <p className="text-xs text-amber italic mt-3" style={{borderTop:'1px solid rgba(245,158,11,0.2)', paddingTop:'0.75rem'}}>"{formatVal(a.result)}"</p>}
-                                                    </button>
-                                                ))}
-                                            </div>
-                                        </div>
-                                    )}
-
-                                    {activeUI === 'boss' && (
-                                        <div className="text-center flex flex-col gap-8 py-6">
-                                            <div>
-                                                <h2 className="text-3xl font-typewriter uppercase tracking-tighter">Commissioner's Office</h2>
-                                                <p className="text-zinc-500 italic mt-2 text-sm">"One chance, Srijan. Name the killer."</p>
-                                            </div>
-                                            <div className="grid grid-cols-2 gap-4" style={{maxWidth:'500px', margin:'0 auto'}}>
-                                                {crimeScene.suspects.map(s => (
-                                                    <button 
-                                                        key={s.id} 
-                                                        onClick={() => setActiveUI(s.isKiller ? 'win' : 'lose')} 
-                                                        className="btn btn-red"
-                                                        style={{padding:'1.25rem', fontSize:'0.75rem', letterSpacing:'0.1em', borderRadius:'1rem', opacity: hasConfessed[s.id] ? 1 : 0.4}}
-                                                        disabled={!hasConfessed[s.id]}
-                                                    >
-                                                        Accuse {formatVal(s.name)}
-                                                    </button>
-                                                ))}
-                                            </div>
-                                            <p className="text-xs text-zinc-700 uppercase tracking-widest">Only suspects with revealed secrets can be accused.</p>
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-                        )}
-                    </div>
-
-                    {(activeUI === 'win' || activeUI === 'lose') && (
-                        <div style={{position:'absolute', inset:0, zIndex:100, background:'#000', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', textAlign:'center', padding:'2.5rem'}} className="animate-fade-in">
-                            <h2 className="text-6xl font-typewriter mb-6 uppercase" style={{color: activeUI === 'win' ? '#f59e0b' : '#dc2626'}}>
-                                {activeUI === 'win' ? 'Guilty Verdict' : 'Case Dismissed'}
-                            </h2>
-                            <p className="text-zinc-300 text-xl max-w-xl mb-12 leading-relaxed">
-                                {activeUI === 'win' 
-                                    ? "Detective Srijan Das, you nailed it. The killer is in custody." 
-                                    : "The suspect walked. The killer is free because of your failed intuition."}
-                            </p>
-                            <button onClick={() => window.location.reload()} className="btn" style={{padding:'1.5rem 3rem', background:'#eee', color:'#000'}}>New Case</button>
-                        </div>
-                    )}
-                </div>
-            );
         }
 
-        function LoadingScreen({ status, onStart }) {
-            return (
-                <div style={{position:'fixed', inset:0, background:'#09090b', display:'flex', alignItems:'center', justifyContent:'center', textAlign:'center', padding:'1.5rem'}}>
-                    <div style={{maxWidth:'400px', width:'100%'}} className="animate-fade-in">
-                        <h1 className="text-3xl font-typewriter text-amber tracking-widest uppercase mb-4">Manor of Whispers</h1>
-                        <div className="noir-card flex flex-col gap-6">
-                            {status === 'initializing' ? (
-                                <button onClick={onStart} className="btn" style={{width:'100%', padding:'1.5rem'}}>Engage Local Link</button>
-                            ) : (
-                                <div className="flex flex-col gap-4">
-                                    <div style={{width:'2rem', height:'2rem', border:'3px solid #f59e0b', borderTopColor:'transparent', borderRadius:'50%', margin:'0 auto'}} className="animate-spin" />
-                                    <p className="font-typewriter text-amber text-xs uppercase tracking-widest animate-pulse">Drafting Mystery...</p>
+        // animate doors
+        interactables.filter(i => i.userData.type === 'door').forEach(d => {
+            const target = d.userData.data.open
+                ? d.userData.startRot + Math.PI / 2
+                : d.userData.startRot;
+            d.userData.pivot.rotation.y = THREE.MathUtils.lerp(d.userData.pivot.rotation.y, target, 0.12);
+        });
+
+        renderer.render(scene, camera);
+
+        // minimap
+        drawMinimap(minimapRef, camera, interactables);
+    };
+    animate();
+
+    /* ── Click to interact / pointer lock ── */
+    const onClick = () => {
+        if (document.pointerLockElement !== renderer.domElement) return;
+        raycaster.setFromCamera(center2d, camera);
+        const hits = raycaster.intersectObjects(interactables);
+        if (hits.length > 0 && hits[0].distance < 5) {
+            const d = hits[0].object.userData;
+            if (d.type === 'door') {
+                d.data.open = !d.data.open;
+            } else {
+                stateRef.current.openUI(d.type, d.data);
+                document.exitPointerLock();
+            }
+        }
+    };
+    renderer.domElement.addEventListener('click', onClick);
+
+    /* ── Resize ── */
+    window.addEventListener('resize', () => {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+}
+
+/* ================================================================
+   MINIMAP RENDERER
+================================================================ */
+function drawMinimap(canvasRef, camera, interactables) {
+    if (!canvasRef.current) return;
+    const c   = canvasRef.current;
+    const ctx = c.getContext('2d');
+    const W   = c.width, H = c.height;
+    const S   = W / 50; // 1 unit = S px, map spans ±25 units
+
+    ctx.clearRect(0, 0, W, H);
+
+    // rooms outline
+    ctx.strokeStyle = 'rgba(255,255,255,0.18)';
+    ctx.lineWidth   = 0.8;
+
+    const rooms = [
+        [-5, 3, 10, 21],      // entrance hall
+        [-2, -15, 4, 18],     // corridor
+        [-20, -15, 18, 30],   // left wing
+        [2, -12.5, 18, 12.5], // right wing
+    ];
+    rooms.forEach(([rx, rz, rw, rh]) => {
+        const px = (rx + 25) * S;
+        const py = H - (rz + 25 + rh) * S;
+        ctx.strokeRect(px, py, rw * S, rh * S);
+    });
+
+    // player dot
+    const px = (camera.position.x + 25) * S;
+    const pz = H - (camera.position.z + 25) * S;
+    ctx.save();
+    ctx.translate(px, pz);
+    ctx.rotate(-camera.rotation.y);
+    ctx.fillStyle = '#f59e0b';
+    ctx.beginPath();
+    ctx.moveTo(0, -5); ctx.lineTo(3, 4); ctx.lineTo(-3, 4);
+    ctx.closePath(); ctx.fill();
+    ctx.restore();
+
+    // suspect dots
+    interactables
+        .filter(i => i.userData.type === 'chat')
+        .forEach(i => {
+            const sx = (i.position.x + 25) * S;
+            const sz = H - (i.position.z + 25) * S;
+            ctx.fillStyle = '#ff6666';
+            ctx.beginPath(); ctx.arc(sx, sz, 3, 0, Math.PI * 2); ctx.fill();
+        });
+}
+
+/* ================================================================
+   MAIN APP
+================================================================ */
+function App() {
+    const [phase,         setPhase]         = useState('name');      // name | loading | generating | playing
+    const [playerName,    setPlayerName]     = useState('');
+    const [crimeScene,    setCrimeScene]     = useState(null);
+    const [activeUI,      setActiveUI]       = useState(null);
+    const [activeSuspect, setActiveSuspect]  = useState(null);
+    const [conversations, setConversations]  = useState({});
+    const [evidence,      setEvidence]       = useState([]);
+    const [completed,     setCompleted]      = useState(new Set());
+    const [isThinking,    setIsThinking]     = useState(false);
+    const [interactText,  setInteractText]   = useState('');
+    const [roomName,      setRoomName]       = useState('Manor of Whispers');
+    const [confessed,     setConfessed]      = useState({});
+
+    const canvasRef  = useRef();
+    const minimapRef = useRef();
+    const mountRef   = useRef(false);
+    const stateRef   = useRef({
+        moveForward: false, moveBackward: false, moveLeft: false, moveRight: false,
+        pitch: 0, yaw: 0, camera: null, interactables: [], activeUI: null,
+        openUI: () => {},
+    });
+
+    /* Keep stateRef.activeUI in sync */
+    useEffect(() => { stateRef.current.activeUI = activeUI; }, [activeUI]);
+
+    /* Wire openUI so the 3D click handler can call it */
+    const openUI = useCallback((type, data) => {
+        if (type === 'chat') setActiveSuspect(data);
+        setActiveUI(type);
+    }, []);
+    useEffect(() => { stateRef.current.openUI = openUI; }, [openUI]);
+
+    /* ESC closes panel */
+    useEffect(() => {
+        const handler = (e) => { if (e.code === 'Escape') setActiveUI(null); };
+        window.addEventListener('keydown', handler);
+        return () => window.removeEventListener('keydown', handler);
+    }, []);
+
+    /* ── Mystery generation ── */
+    const initMystery = async () => {
+        setPhase('generating');
+        try {
+            const prompt = `Generate a murder mystery JSON for a manor house. Include: victim, victimProfile, location, weapon, motive, fullStory, timeline (array of timestamped strings), discoveryPhase (string), evidenceList (array of strings), investigativeActions (array of 4 objects: id, task, result), suspects (array of exactly 5 objects: id, name, role, secret, isKiller boolean, clueTrigger string). Output JSON ONLY, no explanation.`;
+            const res  = await fetch(OLLAMA_URL, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ model: MODEL, format: 'json', stream: false, messages: [{ role: 'user', content: prompt }] })
+            });
+            const data  = await res.json();
+            const scene = JSON.parse(cleanJSON(data.message.content));
+            setCrimeScene(scene);
+            const h = {}; scene.suspects.forEach(s => h[s.id] = []);
+            setConversations(h);
+            setPhase('playing');
+        } catch (e) {
+            alert("Could not reach Ollama. Make sure it is running with:\n\nOLLAMA_ORIGINS=* ollama serve\n\nThen refresh.");
+            setPhase('loading');
+        }
+    };
+
+    /* ── Build Three.js scene once crime scene is ready ── */
+    useEffect(() => {
+        if (phase !== 'playing' || mountRef.current || !crimeScene) return;
+        mountRef.current = true;
+        buildScene(THREE, crimeScene, canvasRef.current, stateRef, setInteractText, setRoomName, minimapRef);
+    }, [phase, crimeScene]);
+
+    /* ── LLM chat ── */
+    const chat = async (msg) => {
+        if (!msg.trim() || isThinking) return;
+        const s = activeSuspect;
+        setConversations(p => ({ ...p, [s.id]: [...p[s.id], { role: 'user', content: msg }] }));
+        setIsThinking(true);
+        try {
+            const res = await fetch(OLLAMA_URL, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    model: MODEL, stream: false,
+                    messages: [
+                        {
+                            role: 'system',
+                            content: `You are ${fmt(s.name)}, a suspect in a murder mystery. Your role: ${fmt(s.role)}. Your secret: "${fmt(s.secret)}". If the detective says or asks about "${fmt(s.clueTrigger)}", you nervously reveal the secret. Keep replies to 2 sentences maximum, and stay in character at all times.`
+                        },
+                        ...conversations[s.id],
+                        { role: 'user', content: msg }
+                    ]
+                })
+            });
+            const d = await res.json();
+            const reply = d.message.content;
+            setConversations(p => ({ ...p, [s.id]: [...p[s.id], { role: 'assistant', content: reply }] }));
+            if (reply.toLowerCase().includes(fmt(s.clueTrigger).toLowerCase())) {
+                setEvidence(prev => [...new Set([...prev, `${fmt(s.name)} revealed: ${fmt(s.secret)}`])]);
+                setConfessed(prev => ({ ...prev, [s.id]: true }));
+            }
+        } finally {
+            setIsThinking(false);
+        }
+    };
+
+    /* ── Screens ── */
+    if (phase === 'name') return <NameScreen onConfirm={(n) => { setPlayerName(n); setPhase('loading'); }} />;
+    if (phase === 'loading' || phase === 'generating')
+        return <LoadingScreen phase={phase} onStart={initMystery} playerName={playerName} />;
+
+    /* ── Playing ── */
+    return (
+        <div className="relative" style={{ width: '100vw', height: '100vh' }}>
+
+            {/* Three.js canvas mount point */}
+            <div
+                ref={canvasRef}
+                style={{ width: '100%', height: '100%' }}
+                onClick={(e) => { if (!activeUI) e.target.closest('div').querySelector('canvas')?.requestPointerLock(); }}
+            />
+
+            {/* ── HUD ── */}
+            <div className="hud-overlay">
+                <div className="crosshair" />
+                <div className="scanline" />
+
+                {interactText && <div className="interaction-prompt font-typewriter">{interactText}</div>}
+
+                {/* Room name */}
+                <div className="room-label font-typewriter">{roomName}</div>
+
+                {/* Evidence folder */}
+                <div className="absolute glass" style={{ top: '1.5rem', right: '6rem', width: '18rem', maxHeight: '260px', overflowY: 'auto' }}>
+                    <p className="text-xs uppercase font-bold text-amber tracking-widest" style={{ marginBottom: '0.5rem' }}>Evidence Folder</p>
+                    <div className="flex flex-col gap-2">
+                        {evidence.map((e, i) => <div key={i} className="evidence-item">{fmt(e)}</div>)}
+                        {evidence.length === 0 && <p className="text-xs text-zinc-500 italic">No evidence recovered yet.</p>}
+                    </div>
+                </div>
+
+                {/* Minimap */}
+                <canvas
+                    ref={minimapRef}
+                    id="minimap"
+                    width={140} height={140}
+                    style={{ width: '140px', height: '140px' }}
+                />
+
+                {/* Controls hint (fades after pointer locked) */}
+                {!activeUI && (
+                    <div style={{ position:'absolute', bottom:'1.5rem', left:'50%', transform:'translateX(-50%)',
+                        color:'rgba(255,255,255,0.2)', fontSize:'11px', letterSpacing:'0.15em', textTransform:'uppercase' }}>
+                        WASD / Click to move &nbsp;·&nbsp; Click NPC to interact &nbsp;·&nbsp; ESC to close panel
+                    </div>
+                )}
+
+                {/* Modal panel */}
+                {activeUI && ['briefing','chat','actions','boss'].includes(activeUI) && (
+                    <div style={{
+                        position:'absolute', inset:0,
+                        display:'flex', alignItems:'center', justifyContent:'center',
+                        background:'rgba(0,0,0,0.78)', padding:'1.5rem',
+                        backdropFilter:'blur(4px)', zIndex:50
+                    }}>
+                        <div className="ui-panel animate-fade-in" style={{ maxHeight:'85vh', overflowY:'auto' }}>
+                            <button
+                                onClick={() => setActiveUI(null)}
+                                style={{ position:'absolute', top:'1.25rem', right:'1.25rem',
+                                    background:'none', border:'none', color:'#555',
+                                    cursor:'pointer', fontSize:'11px', fontWeight:'bold',
+                                    letterSpacing:'0.12em', textTransform:'uppercase' }}
+                            >
+                                Close [ESC]
+                            </button>
+
+                            {/* ── BRIEFING ── */}
+                            {activeUI === 'briefing' && crimeScene && (
+                                <div className="flex flex-col gap-8">
+                                    <div className="noir-card" style={{ position:'relative', padding:'2rem' }}>
+                                        <span style={{ fontSize:'3.5rem', color:'var(--amber)', fontWeight:700,
+                                            position:'absolute', left:'1.25rem', top:'0.75rem', opacity:0.7,
+                                            fontFamily:"'Special Elite', cursive" }}>
+                                            T
+                                        </span>
+                                        <p style={{ fontSize:'1.05rem', color:'#c4c4c8', fontStyle:'italic',
+                                            lineHeight:1.85, paddingLeft:'3.5rem', fontWeight:300 }}>
+                                            {fmt(crimeScene.fullStory)}
+                                        </p>
+                                    </div>
+                                    <div className="grid grid-cols-3 gap-8">
+                                        <div className="flex flex-col gap-2">
+                                            <p className="text-xs uppercase tracking-widest text-zinc-500 font-bold">Victim</p>
+                                            <p className="font-typewriter text-amber" style={{ fontSize:'1.5rem', textTransform:'uppercase' }}>{fmt(crimeScene.victim)}</p>
+                                            <p className="text-sm text-zinc-500 italic">{fmt(crimeScene.victimProfile)}</p>
+                                        </div>
+                                        <div className="flex flex-col gap-4">
+                                            <div>
+                                                <p className="text-xs uppercase tracking-widest text-zinc-500 font-bold" style={{ marginBottom:'0.3rem' }}>Motive</p>
+                                                <p className="text-zinc-300 italic">"{fmt(crimeScene.motive)}"</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-xs uppercase tracking-widest text-zinc-500 font-bold" style={{ marginBottom:'0.3rem' }}>Weapon</p>
+                                                <p className="text-white font-bold uppercase" style={{ fontSize:'1.1rem' }}>{fmt(crimeScene.weapon)}</p>
+                                            </div>
+                                        </div>
+                                        <div className="flex flex-col gap-2">
+                                            <p className="text-xs uppercase tracking-widest text-zinc-500 font-bold">Timeline</p>
+                                            <div className="flex flex-col gap-2" style={{ borderLeft:'2px solid #27272a', paddingLeft:'1rem' }}>
+                                                {crimeScene.timeline?.map((evt, i) => (
+                                                    <div key={i} className="text-xs text-zinc-500">
+                                                        <span className="text-amber">▸ </span>{evt}
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <p className="text-xs uppercase tracking-widest text-zinc-500 font-bold" style={{ marginBottom:'0.75rem' }}>Scene Evidence</p>
+                                        <div className="grid grid-cols-2 gap-2">
+                                            {crimeScene.evidenceList?.map((e, i) => (
+                                                <div key={i} className="evidence-item">{fmt(e)}</div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* ── CHAT ── */}
+                            {activeUI === 'chat' && activeSuspect && (
+                                <div className="flex flex-col" style={{ height:'460px' }}>
+                                    <div style={{ borderBottom:'1px solid #222', paddingBottom:'1rem', marginBottom:'1.25rem' }}>
+                                        <h2 className="font-typewriter text-amber uppercase" style={{ fontSize:'1.75rem', letterSpacing:'-0.02em' }}>{fmt(activeSuspect.name)}</h2>
+                                        <p className="text-xs text-zinc-500 uppercase tracking-widest">{fmt(activeSuspect.role)}</p>
+                                        {confessed[activeSuspect.id] && (
+                                            <span style={{ fontSize:'10px', background:'rgba(245,158,11,0.15)', border:'1px solid rgba(245,158,11,0.3)',
+                                                color:'var(--amber)', padding:'2px 8px', borderRadius:'999px', marginTop:'4px', display:'inline-block' }}>
+                                                Secret Revealed
+                                            </span>
+                                        )}
+                                    </div>
+                                    <div className="flex-1 overflow-y-auto custom-scrollbar flex flex-col gap-4" style={{ marginBottom:'1rem', paddingRight:'0.5rem' }}>
+                                        {conversations[activeSuspect.id].length === 0 && (
+                                            <p className="text-xs text-zinc-500 italic" style={{ alignSelf:'center', marginTop:'2rem' }}>
+                                                Approach carefully. Every word counts.
+                                            </p>
+                                        )}
+                                        {conversations[activeSuspect.id].map((m, i) => (
+                                            <div key={i} className="flex" style={{ justifyContent: m.role === 'user' ? 'flex-end' : 'flex-start' }}>
+                                                <div style={{
+                                                    maxWidth: '72%', padding: '0.875rem 1rem',
+                                                    borderRadius: m.role === 'user' ? '1rem 1rem 0.25rem 1rem' : '1rem 1rem 1rem 0.25rem',
+                                                    fontSize: '0.875rem', lineHeight: 1.6,
+                                                    background: m.role === 'user' ? 'var(--amber)' : '#1a1a1e',
+                                                    color:      m.role === 'user' ? '#000'         : '#c8c8cc',
+                                                    border:     m.role === 'user' ? 'none'         : '1px solid #2a2a2e',
+                                                    fontStyle:  m.role === 'assistant' ? 'italic'  : 'normal',
+                                                }}>
+                                                    {fmt(m.content)}
+                                                </div>
+                                            </div>
+                                        ))}
+                                        {isThinking && (
+                                            <div style={{ display:'flex', gap:'2px', padding:'0.5rem' }}>
+                                                <div className="typing-dot" /><div className="typing-dot" /><div className="typing-dot" />
+                                            </div>
+                                        )}
+                                    </div>
+                                    <form
+                                        onSubmit={(e) => { e.preventDefault(); chat(e.target.m.value); e.target.m.value = ''; }}
+                                        className="flex gap-4"
+                                    >
+                                        <input name="m" className="input-field" placeholder="Ask the suspect something…" autoFocus />
+                                        <button type="submit" className="btn" disabled={isThinking}>Ask</button>
+                                    </form>
+                                </div>
+                            )}
+
+                            {/* ── FORENSIC TERMINAL ── */}
+                            {activeUI === 'actions' && crimeScene && (
+                                <div className="flex flex-col gap-6">
+                                    <div>
+                                        <h2 className="font-typewriter uppercase tracking-widest" style={{ fontSize:'1.25rem' }}>Forensic Terminal</h2>
+                                        <p className="text-xs text-zinc-500 italic" style={{ marginTop:'0.25rem' }}>Run investigative actions to uncover physical evidence.</p>
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-4">
+                                        {crimeScene.investigativeActions.map(a => (
+                                            <button
+                                                key={a.id}
+                                                disabled={completed.has(a.id)}
+                                                onClick={() => {
+                                                    setCompleted(p => new Set([...p, a.id]));
+                                                    setEvidence(e => [...new Set([...e, fmt(a.result)])]);
+                                                }}
+                                                style={{
+                                                    padding:'1.5rem',
+                                                    background: completed.has(a.id) ? 'rgba(245,158,11,0.06)' : 'rgba(24,24,27,0.6)',
+                                                    border: completed.has(a.id) ? '1px solid rgba(245,158,11,0.25)' : '1px solid #27272a',
+                                                    borderRadius:'1rem', textAlign:'left', cursor: completed.has(a.id) ? 'default' : 'pointer',
+                                                    transition:'border-color 0.2s, background 0.2s',
+                                                    opacity: completed.has(a.id) ? 0.75 : 1,
+                                                }}
+                                            >
+                                                <p className="text-sm font-bold text-zinc-300">{fmt(a.task)}</p>
+                                                {completed.has(a.id) && (
+                                                    <p className="text-xs text-amber italic" style={{ borderTop:'1px solid rgba(245,158,11,0.15)', paddingTop:'0.75rem', marginTop:'0.75rem' }}>
+                                                        "{fmt(a.result)}"
+                                                    </p>
+                                                )}
+                                                {!completed.has(a.id) && (
+                                                    <p className="text-xs text-zinc-500 italic" style={{ marginTop:'0.4rem' }}>Click to run analysis</p>
+                                                )}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* ── COMMISSIONER ── */}
+                            {activeUI === 'boss' && crimeScene && (
+                                <div className="text-center flex flex-col gap-8" style={{ padding:'1rem 0' }}>
+                                    <div>
+                                        <h2 className="font-typewriter uppercase" style={{ fontSize:'1.75rem', letterSpacing:'-0.02em' }}>Commissioner's Office</h2>
+                                        <p className="text-zinc-500 italic" style={{ marginTop:'0.5rem', fontSize:'0.9rem' }}>
+                                            "One chance, Detective {playerName}. Name the killer — or walk away in shame."
+                                        </p>
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-4" style={{ maxWidth:'480px', margin:'0 auto', width:'100%' }}>
+                                        {crimeScene.suspects.map(s => (
+                                            <button
+                                                key={s.id}
+                                                onClick={() => setActiveUI(s.isKiller ? 'win' : 'lose')}
+                                                className={`btn btn-red`}
+                                                disabled={!confessed[s.id]}
+                                                style={{ padding:'1.25rem', fontSize:'0.75rem',
+                                                    letterSpacing:'0.1em', borderRadius:'1rem',
+                                                    opacity: confessed[s.id] ? 1 : 0.28 }}
+                                            >
+                                                Accuse {fmt(s.name)}
+                                            </button>
+                                        ))}
+                                    </div>
+                                    <p className="text-xs text-zinc-500 uppercase tracking-widest">
+                                        Only suspects whose secrets you've uncovered may be accused.
+                                    </p>
                                 </div>
                             )}
                         </div>
                     </div>
-                </div>
-            );
-        }
+                )}
+            </div>
 
-        const root = ReactDOM.createRoot(document.getElementById('root'));
-        root.render(<App />);
-    </script>
+            {/* ── WIN / LOSE screen ── */}
+            {(activeUI === 'win' || activeUI === 'lose') && (
+                <div style={{
+                    position:'absolute', inset:0, zIndex:100,
+                    background: activeUI === 'win' ? 'radial-gradient(ellipse at center, #1a1000 0%, #000 70%)' : 'radial-gradient(ellipse at center, #1a0000 0%, #000 70%)',
+                    display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center',
+                    textAlign:'center', padding:'2.5rem',
+                }} className="animate-fade-in">
+                    <h2 className="font-typewriter uppercase" style={{
+                        fontSize:'4rem', marginBottom:'1.5rem',
+                        color: activeUI === 'win' ? 'var(--amber)' : 'var(--red)',
+                        textShadow: activeUI === 'win' ? '0 0 40px rgba(245,158,11,0.5)' : '0 0 40px rgba(220,38,38,0.5)'
+                    }}>
+                        {activeUI === 'win' ? 'Case Closed.' : 'Case Dismissed.'}
+                    </h2>
+                    <p className="text-zinc-300" style={{ fontSize:'1.1rem', maxWidth:'520px', marginBottom:'3rem', lineHeight:1.8 }}>
+                        {activeUI === 'win'
+                            ? `Outstanding work, Detective ${playerName}. The killer is in custody. Justice is served.`
+                            : `An innocent person is accused. The real killer walks free. Your career is over, Detective ${playerName}.`}
+                    </p>
+                    <button onClick={() => window.location.reload()} className="btn"
+                        style={{ padding:'1.25rem 3rem', background:'#e5e5e5', color:'#000', fontSize:'0.8rem' }}>
+                        New Case
+                    </button>
+                </div>
+            )}
+        </div>
+    );
+}
+
+/* ================================================================
+   NAME SCREEN
+================================================================ */
+function NameScreen({ onConfirm }) {
+    const [name, setName] = useState('');
+    return (
+        <div style={{ position:'fixed', inset:0, background:'#09090b',
+            display:'flex', alignItems:'center', justifyContent:'center', padding:'1.5rem' }}>
+            <div style={{ maxWidth:'380px', width:'100%' }} className="animate-fade-in">
+                <h1 className="font-typewriter text-amber uppercase tracking-widest"
+                    style={{ fontSize:'2rem', textAlign:'center', marginBottom:'0.5rem' }}>
+                    Manor of Whispers
+                </h1>
+                <p className="text-zinc-500 text-xs uppercase tracking-widest"
+                    style={{ textAlign:'center', marginBottom:'2rem' }}>
+                    A 3D Detective Mystery
+                </p>
+                <div className="noir-card flex flex-col gap-6">
+                    <div className="flex flex-col gap-2">
+                        <label className="text-xs text-zinc-500 uppercase tracking-widest font-bold">Detective Name</label>
+                        <input
+                            className="input-field"
+                            placeholder="Enter your name…"
+                            value={name}
+                            onChange={e => setName(e.target.value)}
+                            onKeyDown={e => e.key === 'Enter' && name.trim() && onConfirm(name.trim())}
+                            autoFocus
+                        />
+                    </div>
+                    <button
+                        className="btn w-full"
+                        style={{ padding:'1.25rem' }}
+                        onClick={() => name.trim() && onConfirm(name.trim())}
+                        disabled={!name.trim()}
+                    >
+                        Enter the Manor
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+/* ================================================================
+   LOADING SCREEN
+================================================================ */
+function LoadingScreen({ phase, onStart, playerName }) {
+    return (
+        <div style={{ position:'fixed', inset:0, background:'#09090b',
+            display:'flex', alignItems:'center', justifyContent:'center', padding:'1.5rem' }}>
+            <div style={{ maxWidth:'420px', width:'100%' }} className="animate-fade-in">
+                <h1 className="font-typewriter text-amber uppercase tracking-widest"
+                    style={{ fontSize:'2rem', textAlign:'center', marginBottom:'0.5rem' }}>
+                    Manor of Whispers
+                </h1>
+                <p className="text-zinc-500 text-xs uppercase tracking-widest"
+                    style={{ textAlign:'center', marginBottom:'2rem' }}>
+                    Detective {playerName}
+                </p>
+                <div className="noir-card flex flex-col gap-6">
+                    {phase === 'loading' ? (
+                        <>
+                            <p className="text-zinc-300 text-sm" style={{ lineHeight:1.7 }}>
+                                This game requires a local <strong style={{ color:'var(--amber)' }}>Ollama</strong> instance running <code style={{ background:'#1a1a1a', padding:'2px 6px', borderRadius:'4px' }}>mistral:7b</code>.
+                            </p>
+                            <p className="text-xs text-zinc-500" style={{ lineHeight:1.6 }}>
+                                Start Ollama with:<br/>
+                                <code style={{ background:'#1a1a1a', padding:'4px 8px', borderRadius:'4px', display:'block', marginTop:'6px', color:'#aaa' }}>
+                                    OLLAMA_ORIGINS=* ollama serve
+                                </code>
+                            </p>
+                            <button onClick={onStart} className="btn w-full" style={{ padding:'1.25rem' }}>
+                                Connect &amp; Generate Case
+                            </button>
+                        </>
+                    ) : (
+                        <div className="flex flex-col gap-4 items-center" style={{ padding:'1rem 0' }}>
+                            <div style={{
+                                width:'2rem', height:'2rem',
+                                border:'2px solid #27272a', borderTopColor:'var(--amber)',
+                                borderRadius:'50%'
+                            }} className="animate-spin" />
+                            <p className="font-typewriter text-amber text-xs uppercase tracking-widest animate-pulse">
+                                Drafting the mystery…
+                            </p>
+                        </div>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
+}
+
+/* ================================================================
+   MOUNT
+================================================================ */
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
 </body>
 </html>
