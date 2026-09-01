@@ -1,4 +1,4 @@
-﻿const { useState, useEffect, useRef, useCallback } = React;
+const { useState, useEffect, useRef, useCallback } = React;
 
 /* ================================================================
    MAIN APP
@@ -17,6 +17,7 @@ function App() {
     const [interactText,  setInteractText]   = useState('');
     const [roomName,      setRoomName]       = useState('Manor of Whispers');
     const [confessed,     setConfessed]      = useState({});
+    const [showCheatSheet, setShowCheatSheet] = useState(false);
 
     const canvasRef  = useRef();
     const minimapRef = useRef();
@@ -37,9 +38,12 @@ function App() {
     }, []);
     useEffect(() => { stateRef.current.openUI = openUI; }, [openUI]);
 
-    /* ESC closes panel */
+    /* ESC closes panel, Backtick toggles cheat sheet */
     useEffect(() => {
-        const handler = (e) => { if (e.code === 'Escape') setActiveUI(null); };
+        const handler = (e) => { 
+            if (e.code === 'Escape') setActiveUI(null); 
+            if (e.code === 'Backquote') setShowCheatSheet(prev => !prev);
+        };
         window.addEventListener('keydown', handler);
         return () => window.removeEventListener('keydown', handler);
     }, []);
@@ -368,7 +372,7 @@ function App() {
                 )}
             </div>
 
-            {/* â”€â”€ WIN / LOSE screen â”€â”€ */}
+            {/* ── WIN / LOSE screen ── */}
             {(activeUI === 'win' || activeUI === 'lose') && (
                 <div style={{
                     position:'absolute', inset:0, zIndex:100,
@@ -392,6 +396,52 @@ function App() {
                         style={{ padding:'1.25rem 3rem', background:'#e5e5e5', color:'#000', fontSize:'0.8rem' }}>
                         New Case
                     </button>
+                </div>
+            )}
+
+            {/* ── CHEAT SHEET OVERLAY ── */}
+            {showCheatSheet && crimeScene && (
+                <div style={{
+                    position:'absolute', inset:0, zIndex:999,
+                    background:'rgba(0,0,0,0.85)', backdropFilter:'blur(5px)',
+                    display:'flex', alignItems:'center', justifyContent:'center',
+                    padding:'2rem'
+                }}>
+                    <div style={{
+                        background:'#111', border:'1px solid var(--amber)',
+                        borderRadius:'0.5rem', padding:'2rem', width:'100%', maxWidth:'800px',
+                        maxHeight:'90vh', overflowY:'auto', color:'#22c55e',
+                        fontFamily:'monospace', fontSize:'0.85rem'
+                    }}>
+                        <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'1rem', borderBottom:'1px solid var(--amber)', paddingBottom:'0.5rem' }}>
+                            <h2 style={{ color:'var(--amber)', margin:0, textTransform:'uppercase' }}>Developer Cheat Sheet</h2>
+                            <button onClick={() => setShowCheatSheet(false)} style={{ background:'none', border:'none', color:'#fff', cursor:'pointer' }}>Close (â€¼)</button>
+                        </div>
+                        
+                        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'1rem', marginBottom:'2rem' }}>
+                            <div><span style={{ color:'#888' }}>Victim:</span> {fmt(crimeScene.victim)}</div>
+                            <div><span style={{ color:'#888' }}>Weapon:</span> {fmt(crimeScene.weapon)}</div>
+                            <div style={{ gridColumn:'1 / -1' }}><span style={{ color:'#888' }}>Motive:</span> {fmt(crimeScene.motive)}</div>
+                        </div>
+
+                        <h3 style={{ color:'var(--amber)', marginBottom:'0.5rem' }}>Suspects</h3>
+                        <div style={{ display:'flex', flexDirection:'column', gap:'0.75rem', marginBottom:'2rem' }}>
+                            {crimeScene.suspects.map(s => (
+                                <div key={s.id} style={{ 
+                                    padding:'0.75rem', 
+                                    border: s.isKiller ? '1px solid #ef4444' : '1px solid #333',
+                                    background: s.isKiller ? 'rgba(239,68,68,0.1)' : 'transparent'
+                                }}>
+                                    <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'0.25rem' }}>
+                                        <strong style={{ color:'#fff' }}>{fmt(s.name)} ({fmt(s.role)})</strong>
+                                        {s.isKiller && <span style={{ color:'#ef4444', fontWeight:'bold', border:'1px solid #ef4444', padding:'0 4px', fontSize:'0.7rem' }}>KILLER</span>}
+                                    </div>
+                                    <div style={{ color:'#888', marginBottom:'0.25rem' }}>Trigger: <span style={{ color:'#ccc' }}>{fmt(s.clueTrigger)}</span></div>
+                                    <div>Secret: <span style={{ color:'var(--amber)' }}>{fmt(s.secret)}</span></div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
                 </div>
             )}
         </div>
